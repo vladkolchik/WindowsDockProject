@@ -7,10 +7,13 @@ class DockManager {
         this.dragDropIndicator = document.getElementById('drag-drop-indicator');
         this.currentRightClickedItem = null;
         this.dragTimeout = null; // Таймаут для debounce drag-and-drop
+        this.isWindowPinned = true; // Состояние закрепления окна
         
         this.initializeEventListeners();
         this.initializeDragDrop();
         this.renderApps();
+        this.loadWindowPinState();
+        
         // Добавляем небольшую задержку для правильного отображения номеров
         setTimeout(() => {
             this.updateAppNumbers();
@@ -19,6 +22,16 @@ class DockManager {
         // Обработчик для нативного контекстного меню
         ipcRenderer.on('context-menu-action', (event, action) => {
             this.handleContextMenuAction(action);
+        });
+
+        // Обработчик изменения состояния закрепления окна
+        ipcRenderer.on('window-pin-changed', (event, isPinned) => {
+            this.isWindowPinned = isPinned;
+            this.updateWindowPinIndicator();
+            this.showNotification(
+                isPinned ? '📌 Окно закреплено' : '📌 Окно откреплено - можно перетаскивать',
+                'info'
+            );
         });
 
         // Обработчики для управления приложениями из настроек
@@ -55,6 +68,29 @@ class DockManager {
         localStorage.setItem('dockApps', JSON.stringify(this.apps));
     }
 
+    // Загрузка состояния закрепления окна
+    async loadWindowPinState() {
+        try {
+            this.isWindowPinned = await ipcRenderer.invoke('get-window-pin-state');
+            this.updateWindowPinIndicator();
+        } catch (error) {
+            console.error('Ошибка загрузки состояния закрепления окна:', error);
+        }
+    }
+
+    // Обновление визуального индикатора состояния закрепления
+    updateWindowPinIndicator() {
+        const dockContainer = document.querySelector('.dock-container');
+        
+        if (this.isWindowPinned) {
+            dockContainer.classList.remove('unpinned');
+            dockContainer.title = 'Dock закреплен';
+        } else {
+            dockContainer.classList.add('unpinned');
+            dockContainer.title = 'Dock не закреплен - можно перетаскивать';
+        }
+    }
+
     // Инициализация обработчиков событий
     initializeEventListeners() {
         // Обработка кликов по элементам dock панели
@@ -77,6 +113,9 @@ class DockManager {
 
         // Обработка drag & drop
         this.setupDragDropHandlers();
+        
+        // Обработка перетаскивания окна
+        this.setupWindowDragHandlers();
 
         // Обработка клавиш
         document.addEventListener('keydown', (e) => {
@@ -479,6 +518,10 @@ class DockManager {
 • Перетащите файл (.exe/.lnk) на dock панель
 • Или используйте раздел "Управление приложениями" в настройках
 
+📌 Управление окном:
+• Правый клик → "Закрепить окно" - закрепить/открепить dock
+• Когда окно не закреплено, его можно перетаскивать по экрану
+
 💡 Навигация:
 • Enter - Подтвердить в формах
 • Tab - Переключение между полями
@@ -504,6 +547,124 @@ class DockManager {
         helpModal.addEventListener('click', (e) => {
             if (e.target === helpModal) {
                 helpModal.remove();
+            }
+        });
+    }
+
+    // Настройка обработчиков перетаскивания окна
+    setupWindowDragHandlers() {
+        const dockContainer = document.querySelector('.dock-container');
+        let isDragging = false;
+        let mouseOffset = { x: 0, y: 0 }; // Смещение курсора относительно окна
+        
+        dockContainer.addEventListener('mousedown', async (e) => {
+            // Проверяем, что окно не закреплено и клик не по элементу dock-item
+            if (!this.isWindowPinned && !e.target.closest('.dock-item')) {
+                isDragging = true;
+                
+                // Получаем текущую позицию окна
+                try {
+                    const windowPos = await ipcRenderer.invoke('get-window-position');
+                    
+                    // Вычисляем смещение курсора относительно окна (один раз)
+                    mouseOffset.x = e.screenX - windowPos.x;
+                    mouseOffset.y = e.screenY - windowPos.y;
+                } catch (error) {
+                    console.error('Ошибка получения позиции окна:', error);
+                    mouseOffset = { x: 0, y: 0 };
+                }
+                
+                // Добавляем визуальные классы для перетаскивания
+                dockContainer.classList.add('dragging');
+                
+                // Отключаем анимации и переходы для стабильности
+                const style = document.createElement('style');
+                style.id = 'drag-disable-transitions';
+                style.textContent = `
+                    * {
+                        transition: none !important;
+                        animation: none !important;
+                    }
+                `;
+                document.head.appendChild(style);
+                
+                dockContainer.style.cursor = 'grabbing';
+                dockContainer.style.userSelect = 'none';
+                e.preventDefault();
+                
+                // Отключаем стандартное перетаскивание
+                document.body.style.pointerEvents = 'none';
+                dockContainer.style.pointerEvents = 'auto';
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                // Просто устанавливаем окно в позицию курсора минус смещение
+                const windowX = e.screenX - mouseOffset.x;
+                const windowY = e.screenY - mouseOffset.y;
+                
+                try {
+                    ipcRenderer.sendSync('move-window-absolute', windowX, windowY);
+                } catch (error) {
+                    console.error('Ошибка перемещения окна:', error);
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                dockContainer.classList.remove('dragging');
+                
+                // Восстанавливаем анимации и переходы
+                const disableStyle = document.getElementById('drag-disable-transitions');
+                if (disableStyle) {
+                    disableStyle.remove();
+                }
+                
+                dockContainer.style.cursor = '';
+                dockContainer.style.userSelect = '';
+                document.body.style.pointerEvents = '';
+                dockContainer.style.pointerEvents = '';
+            }
+        });
+
+        // Отмена перетаскивания при потере фокуса
+        window.addEventListener('blur', () => {
+            if (isDragging) {
+                isDragging = false;
+                dockContainer.classList.remove('dragging');
+                
+                // Восстанавливаем анимации и переходы
+                const disableStyle = document.getElementById('drag-disable-transitions');
+                if (disableStyle) {
+                    disableStyle.remove();
+                }
+                
+                dockContainer.style.cursor = '';
+                dockContainer.style.userSelect = '';
+                document.body.style.pointerEvents = '';
+                dockContainer.style.pointerEvents = '';
+            }
+        });
+
+        // Обработка Escape для отмены перетаскивания
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isDragging) {
+                isDragging = false;
+                dockContainer.classList.remove('dragging');
+                
+                // Восстанавливаем анимации и переходы
+                const disableStyle = document.getElementById('drag-disable-transitions');
+                if (disableStyle) {
+                    disableStyle.remove();
+                }
+                
+                dockContainer.style.cursor = '';
+                dockContainer.style.userSelect = '';
+                document.body.style.pointerEvents = '';
+                dockContainer.style.pointerEvents = '';
             }
         });
     }

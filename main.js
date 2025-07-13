@@ -1,24 +1,72 @@
 const { app, BrowserWindow, screen, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 let mainWindow;
 let settingsWindow;
+let isWindowPinned = true; // По умолчанию окно закреплено
+let windowPosition = null; // Сохраненная позиция окна
+
+// Путь к файлу настроек
+const settingsPath = path.join(os.homedir(), '.windows-dock-settings.json');
+
+// Загрузка настроек
+function loadSettings() {
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const data = fs.readFileSync(settingsPath, 'utf8');
+      const settings = JSON.parse(data);
+      isWindowPinned = settings.isWindowPinned !== undefined ? settings.isWindowPinned : true;
+      windowPosition = settings.windowPosition || null;
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки настроек:', error);
+  }
+}
+
+// Сохранение настроек
+function saveSettings() {
+  try {
+    const settings = {
+      isWindowPinned,
+      windowPosition: windowPosition || (mainWindow ? { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] } : null)
+    };
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  } catch (error) {
+    console.error('Ошибка сохранения настроек:', error);
+  }
+}
 
 function createWindow() {
   const display = screen.getPrimaryDisplay();
   const { width: screenWidth, height: screenHeight } = display.workAreaSize;
   
+  // Загружаем настройки
+  loadSettings();
+  
+  // Определяем позицию окна
+  let x, y;
+  if (windowPosition) {
+    x = windowPosition.x;
+    y = windowPosition.y;
+  } else {
+    x = Math.round((screenWidth - 600) / 2);
+    y = 10;
+  }
+  
   // Создаем окно dock панели
   mainWindow = new BrowserWindow({
     width: 600,
     height: 80,
-    x: Math.round((screenWidth - 600) / 2), // Центрируем по горизонтали
-    y: 10, // Размещаем в верхней части экрана с небольшим отступом
+    x: x,
+    y: y,
     frame: false, // Убираем рамку окна
     transparent: true, // Делаем окно прозрачным
     resizable: false, // Запрещаем изменение размера
     alwaysOnTop: true, // Всегда поверх других окон
     skipTaskbar: true, // Не показывать в панели задач
+    movable: !isWindowPinned, // Устанавливаем возможность перетаскивания
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -33,6 +81,15 @@ function createWindow() {
   
   // Показываем окно без анимации
   mainWindow.showInactive();
+  
+  // Обработчик перемещения окна
+  mainWindow.on('moved', () => {
+    if (!isWindowPinned) {
+      const position = mainWindow.getPosition();
+      windowPosition = { x: position[0], y: position[1] };
+      saveSettings();
+    }
+  });
   
   // При клике вне окна, скрываем его
   mainWindow.on('blur', () => {
@@ -93,6 +150,15 @@ function createContextMenu(hasSelectedItem = false) {
     },
     { type: 'separator' },
     {
+      label: isWindowPinned ? '📌 Открепить окно' : '📌 Закрепить окно',
+      type: 'checkbox',
+      checked: isWindowPinned,
+      click: () => {
+        toggleWindowPin();
+      }
+    },
+    { type: 'separator' },
+    {
       label: 'Горячие клавиши',
       click: () => {
         mainWindow.webContents.send('context-menu-action', 'help');
@@ -107,6 +173,25 @@ function createContextMenu(hasSelectedItem = false) {
   ];
 
   return Menu.buildFromTemplate(template);
+}
+
+// Переключение состояния закрепления окна
+function toggleWindowPin() {
+  isWindowPinned = !isWindowPinned;
+  
+  if (mainWindow) {
+    mainWindow.setMovable(!isWindowPinned);
+    
+    // Сохраняем текущую позицию
+    const position = mainWindow.getPosition();
+    windowPosition = { x: position[0], y: position[1] };
+    
+    // Сохраняем настройки
+    saveSettings();
+    
+    // Уведомляем renderer о смене состояния
+    mainWindow.webContents.send('window-pin-changed', isWindowPinned);
+  }
 }
 
 // Обработка готовности приложения
@@ -147,6 +232,8 @@ ipcMain.handle('open-settings', () => {
 ipcMain.handle('get-settings', () => {
   return {
     alwaysOnTop: mainWindow?.isAlwaysOnTop() || true,
+    isWindowPinned: isWindowPinned,
+    windowPosition: windowPosition,
     hotkeys: {
       toggleDock: 'Ctrl+H',
       quit: 'Ctrl+Q',
@@ -280,7 +367,47 @@ ipcMain.handle('quit-app', () => {
   app.quit();
 });
 
+// Получение состояния закрепления
+ipcMain.handle('get-window-pin-state', () => {
+  return isWindowPinned;
+});
+
+// Управление закреплением окна
+ipcMain.handle('toggle-window-pin', () => {
+  toggleWindowPin();
+  return isWindowPinned;
+});
+
+// Получение текущей позиции окна
+ipcMain.handle('get-window-position', () => {
+  if (mainWindow) {
+    const position = mainWindow.getPosition();
+    return { x: position[0], y: position[1] };
+  }
+  return { x: 0, y: 0 };
+});
+
+
+
+// Синхронное перемещение окна (абсолютное позиционирование)
+ipcMain.on('move-window-absolute', (event, targetX, targetY) => {
+  if (mainWindow && !isWindowPinned) {
+    // Просто устанавливаем позицию без округления
+    mainWindow.setPosition(targetX, targetY);
+    
+    // Обновляем сохраненную позицию
+    windowPosition = { x: targetX, y: targetY };
+    
+    event.returnValue = { x: targetX, y: targetY };
+  } else {
+    event.returnValue = null;
+  }
+});
+
+
+
 // Предотвращение закрытия приложения по умолчанию
 app.on('before-quit', (event) => {
-  // Можно добавить логику для сохранения состояния
+  // Сохраняем настройки перед выходом
+  saveSettings();
 }); 
