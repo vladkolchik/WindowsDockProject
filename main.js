@@ -157,14 +157,48 @@ ipcMain.handle('get-settings', () => {
 });
 
 // Получение списка приложений
-ipcMain.handle('get-apps', () => {
+ipcMain.handle('get-apps', async () => {
   if (mainWindow) {
-    return mainWindow.webContents.executeJavaScript(`
-      const dockManager = window.dockManager || {};
-      dockManager.apps || [];
-    `).catch(() => []);
+    try {
+      // Получаем приложения напрямую из localStorage
+      const apps = await mainWindow.webContents.executeJavaScript(`
+        (() => {
+          const defaultApps = [
+            { id: 'explorer', name: 'Проводник', icon: '📁', path: 'explorer' },
+            { id: 'chrome', name: 'Chrome', icon: '🌐', path: 'chrome' },
+            { id: 'vscode', name: 'VS Code', icon: '💻', path: 'code' },
+            { id: 'terminal', name: 'Терминал', icon: '⚡', path: 'cmd' },
+            { id: 'calculator', name: 'Калькулятор', icon: '🔢', path: 'calc' },
+            { id: 'settings', name: 'Настройки', icon: '⚙️', path: 'ms-settings:' }
+          ];
+          
+          const saved = localStorage.getItem('dockApps');
+          return saved ? JSON.parse(saved) : defaultApps;
+        })()
+      `);
+      return apps || [];
+    } catch (error) {
+      console.error('Ошибка получения приложений:', error);
+      // Возвращаем приложения по умолчанию в случае ошибки
+      return [
+        { id: 'explorer', name: 'Проводник', icon: '📁', path: 'explorer' },
+        { id: 'chrome', name: 'Chrome', icon: '🌐', path: 'chrome' },
+        { id: 'vscode', name: 'VS Code', icon: '💻', path: 'code' },
+        { id: 'terminal', name: 'Терминал', icon: '⚡', path: 'cmd' },
+        { id: 'calculator', name: 'Калькулятор', icon: '🔢', path: 'calc' },
+        { id: 'settings', name: 'Настройки', icon: '⚙️', path: 'ms-settings:' }
+      ];
+    }
   }
-  return [];
+  // Возвращаем приложения по умолчанию если нет главного окна
+  return [
+    { id: 'explorer', name: 'Проводник', icon: '📁', path: 'explorer' },
+    { id: 'chrome', name: 'Chrome', icon: '🌐', path: 'chrome' },
+    { id: 'vscode', name: 'VS Code', icon: '💻', path: 'code' },
+    { id: 'terminal', name: 'Терминал', icon: '⚡', path: 'cmd' },
+    { id: 'calculator', name: 'Калькулятор', icon: '🔢', path: 'calc' },
+    { id: 'settings', name: 'Настройки', icon: '⚙️', path: 'ms-settings:' }
+  ];
 });
 
 // Добавление приложения
