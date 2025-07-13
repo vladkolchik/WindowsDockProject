@@ -4,16 +4,35 @@ const { ipcRenderer } = require('electron');
 class DockManager {
     constructor() {
         this.apps = this.loadApps();
-        this.contextMenu = document.getElementById('context-menu');
-        this.modal = document.getElementById('add-app-modal');
+        this.dragDropIndicator = document.getElementById('drag-drop-indicator');
         this.currentRightClickedItem = null;
+        this.dragTimeout = null; // Таймаут для debounce drag-and-drop
         
         this.initializeEventListeners();
+        this.initializeDragDrop();
         this.renderApps();
         // Добавляем небольшую задержку для правильного отображения номеров
         setTimeout(() => {
             this.updateAppNumbers();
         }, 100);
+        
+        // Обработчик для нативного контекстного меню
+        ipcRenderer.on('context-menu-action', (event, action) => {
+            this.handleContextMenuAction(action);
+        });
+
+        // Обработчики для управления приложениями из настроек
+        ipcRenderer.on('add-app-from-settings', (event, app) => {
+            this.apps.push(app);
+            this.saveApps();
+            this.renderApps();
+        });
+
+        ipcRenderer.on('remove-app-from-settings', (event, appId) => {
+            this.apps = this.apps.filter(a => a.id !== appId);
+            this.saveApps();
+            this.renderApps();
+        });
     }
 
     // Загрузка приложений из localStorage
@@ -44,37 +63,30 @@ class DockManager {
             if (dockItem) {
                 this.handleDockItemClick(dockItem);
             }
-            
-            // Скрытие контекстного меню при клике в другом месте
-            this.hideContextMenu();
         });
 
         // Обработка правого клика
         document.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            const dockItem = e.target.closest('.dock-item');
-            if (dockItem) {
-                this.showContextMenu(e, dockItem);
+            const dockContainer = e.target.closest('.dock-container');
+            if (dockContainer) {
+                const dockItem = e.target.closest('.dock-item');
+                this.showContextMenu(e, dockItem); // dockItem может быть null
             }
         });
 
-        // Обработка контекстного меню
-        this.contextMenu.addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
-            if (action) {
-                this.handleContextMenuAction(action);
-            }
-        });
-
-        // Обработка модального окна
-        this.setupModalHandlers();
+        // Обработка drag & drop
+        this.setupDragDropHandlers();
 
         // Обработка клавиш
         document.addEventListener('keydown', (e) => {
-            // Escape - закрыть меню и модальные окна
+            // Escape - закрыть drag & drop индикатор
             if (e.key === 'Escape') {
-                this.hideContextMenu();
-                this.hideModal();
+                if (this.dragTimeout) {
+                    clearTimeout(this.dragTimeout);
+                    this.dragTimeout = null;
+                }
+                this.hideDragDropIndicator();
             }
             
             // Ctrl + H - скрыть/показать dock
@@ -87,12 +99,6 @@ class DockManager {
             if (e.ctrlKey && e.key === 'q') {
                 e.preventDefault();
                 this.handleSystemAction('quit');
-            }
-            
-            // Ctrl + N - добавить новое приложение
-            if (e.ctrlKey && e.key === 'n') {
-                e.preventDefault();
-                this.showModal();
             }
             
             // F1 - показать помощь
@@ -169,29 +175,26 @@ class DockManager {
     showContextMenu(e, dockItem) {
         this.currentRightClickedItem = dockItem;
         
-        const rect = dockItem.getBoundingClientRect();
+        let x, y;
         
-        let x = rect.left + rect.width / 2;
-        let y = rect.bottom + 10; // Размещаем меню снизу от dock панели
+        if (dockItem) {
+            // Если клик по элементу, позиционируем меню относительно элемента
+            const rect = dockItem.getBoundingClientRect();
+            x = rect.left + rect.width / 2;
+            y = rect.bottom + 10; // Размещаем меню снизу от элемента
+        } else {
+            // Если клик по свободному месту, позиционируем меню относительно курсора
+            x = e.clientX;
+            y = e.clientY + 10; // Размещаем меню чуть ниже курсора
+        }
         
-        this.contextMenu.style.left = `${x}px`;
-        this.contextMenu.style.top = `${y}px`;
-        this.contextMenu.style.transform = 'translateX(-50%)';
-        this.contextMenu.classList.add('show');
-    }
-
-    // Скрытие контекстного меню
-    hideContextMenu() {
-        this.contextMenu.classList.remove('show');
-        this.currentRightClickedItem = null;
+        // Показываем нативное контекстное меню
+        ipcRenderer.invoke('show-context-menu', x, y, !!dockItem);
     }
 
     // Обработка действий контекстного меню
     handleContextMenuAction(action) {
         switch (action) {
-            case 'add-app':
-                this.showModal();
-                break;
             case 'remove-app':
                 this.removeApp();
                 break;
@@ -202,66 +205,102 @@ class DockManager {
                 this.showSettings();
                 break;
         }
-        this.hideContextMenu();
     }
 
-    // Показ модального окна
-    showModal() {
-        this.modal.classList.add('show');
-        document.getElementById('app-name').focus();
-    }
-
-    // Скрытие модального окна
-    hideModal() {
-        this.modal.classList.remove('show');
-        this.clearModalForm();
-    }
-
-    // Очистка формы модального окна
-    clearModalForm() {
-        document.getElementById('app-name').value = '';
-        document.getElementById('app-path').value = '';
-        document.getElementById('app-icon').value = '';
-    }
-
-    // Настройка обработчиков модального окна
-    setupModalHandlers() {
-        const form = document.getElementById('add-app-form');
-        const cancelButton = document.getElementById('cancel-button');
-        const browseButton = document.getElementById('browse-button');
-
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.addApp();
+    // Инициализация drag & drop
+    initializeDragDrop() {
+        const dockContainer = document.querySelector('.dock-container');
+        
+        // Предотвращаем стандартное поведение для drag & drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dockContainer.addEventListener(eventName, this.preventDefaults, false);
+            document.body.addEventListener(eventName, this.preventDefaults, false);
         });
 
-        cancelButton.addEventListener('click', () => {
-            this.hideModal();
+        // Показываем индикатор при входе в зону или движении над ней
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dockContainer.addEventListener(eventName, (e) => {
+                this.showDragDropIndicator();
+                // Сбрасываем таймаут скрытия
+                if (this.dragTimeout) {
+                    clearTimeout(this.dragTimeout);
+                    this.dragTimeout = null;
+                }
+            }, false);
         });
 
-        browseButton.addEventListener('click', () => {
-            // В реальном приложении здесь будет диалог выбора файла
-            this.showNotification('Функция "Обзор" будет доступна в будущих обновлениях');
-        });
-
-        // Закрытие модального окна при клике вне его
-        this.modal.addEventListener('click', (e) => {
-            if (e.target === this.modal) {
-                this.hideModal();
+        // Скрываем индикатор при выходе из зоны с небольшой задержкой
+        dockContainer.addEventListener('dragleave', (e) => {
+            // Используем debounce для предотвращения мигания
+            if (this.dragTimeout) {
+                clearTimeout(this.dragTimeout);
             }
+            this.dragTimeout = setTimeout(() => {
+                this.hideDragDropIndicator();
+            }, 50); // Небольшая задержка в 50ms
+        }, false);
+
+        // Обработка drop события - сразу скрываем индикатор
+        dockContainer.addEventListener('drop', (e) => {
+            if (this.dragTimeout) {
+                clearTimeout(this.dragTimeout);
+                this.dragTimeout = null;
+            }
+            this.hideDragDropIndicator();
+            this.handleDrop(e);
+        }, false);
+
+        // Сброс при потере фокуса окна
+        window.addEventListener('blur', () => {
+            if (this.dragTimeout) {
+                clearTimeout(this.dragTimeout);
+                this.dragTimeout = null;
+            }
+            this.hideDragDropIndicator();
         });
     }
 
-    // Добавление приложения
-    addApp() {
-        const name = document.getElementById('app-name').value.trim();
-        const path = document.getElementById('app-path').value.trim();
-        const icon = document.getElementById('app-icon').value.trim() || '🚀';
+    // Предотвращение стандартного поведения
+    preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
 
-        if (!name || !path) {
-            this.showNotification('Заполните все обязательные поля', 'error');
-            return;
+    // Показ drag & drop индикатора
+    showDragDropIndicator() {
+        this.dragDropIndicator.classList.add('show');
+    }
+
+    // Скрытие drag & drop индикатора
+    hideDragDropIndicator() {
+        this.dragDropIndicator.classList.remove('show');
+        // Сбрасываем таймаут для безопасности
+        if (this.dragTimeout) {
+            clearTimeout(this.dragTimeout);
+            this.dragTimeout = null;
         }
+    }
+
+    // Настройка обработчиков drag & drop
+    setupDragDropHandlers() {
+        // Дополнительные обработчики при необходимости
+    }
+
+    // Обработка drop события
+    handleDrop(e) {
+        const files = e.dataTransfer.files;
+        
+        if (files.length > 0) {
+            const file = files[0];
+            this.addAppFromFile(file);
+        }
+    }
+
+    // Добавление приложения из файла
+    addAppFromFile(file) {
+        const path = file.path;
+        const name = file.name.replace(/\.[^/.]+$/, ""); // Убираем расширение
+        const icon = this.getIconForFile(file);
 
         const newApp = {
             id: `app_${Date.now()}`,
@@ -273,8 +312,30 @@ class DockManager {
         this.apps.push(newApp);
         this.saveApps();
         this.renderApps();
-        this.hideModal();
         this.showNotification(`Приложение "${name}" добавлено`);
+    }
+
+    // Получение иконки для файла
+    getIconForFile(file) {
+        const extension = file.name.split('.').pop().toLowerCase();
+        
+        const iconMap = {
+            'exe': '🚀',
+            'msi': '📦',
+            'bat': '⚡',
+            'cmd': '⚡',
+            'lnk': '🔗',
+            'app': '📱',
+            'deb': '📦',
+            'rpm': '📦',
+            'dmg': '💿',
+            'zip': '📁',
+            'rar': '📁',
+            'tar': '📁',
+            'gz': '📁'
+        };
+
+        return iconMap[extension] || '🚀';
     }
 
     // Удаление приложения
@@ -296,21 +357,14 @@ class DockManager {
     renderApps() {
         const dockSection = document.querySelector('.dock-section');
         
-        // Очищаем существующие элементы (кроме системных)
-        const customApps = dockSection.querySelectorAll('.dock-item[data-app]');
-        customApps.forEach(item => {
-            // Оставляем только системные элементы
-            if (!['explorer', 'chrome', 'vscode', 'terminal', 'calculator', 'settings'].includes(item.dataset.app)) {
-                item.remove();
-            }
-        });
+        // Полностью очищаем все элементы приложений
+        const allApps = dockSection.querySelectorAll('.dock-item[data-app]');
+        allApps.forEach(item => item.remove());
 
-        // Добавляем пользовательские приложения
+        // Заново отрисовываем все приложения из массива this.apps
         this.apps.forEach(app => {
-            if (!['explorer', 'chrome', 'vscode', 'terminal', 'calculator', 'settings'].includes(app.id)) {
-                const dockItem = this.createDockItem(app);
-                dockSection.appendChild(dockItem);
-            }
+            const dockItem = this.createDockItem(app);
+            dockSection.appendChild(dockItem);
         });
 
         // Добавляем номера для быстрого запуска
@@ -387,8 +441,13 @@ class DockManager {
     }
 
     // Показ настроек
-    showSettings() {
-        this.showNotification('Настройки будут доступны в будущих обновлениях');
+    async showSettings() {
+        try {
+            await ipcRenderer.invoke('open-settings');
+        } catch (error) {
+            console.error('Ошибка открытия настроек:', error);
+            this.showNotification('Ошибка открытия настроек', 'error');
+        }
     }
 
     // Запуск приложения по индексу (для горячих клавиш)
@@ -409,13 +468,16 @@ class DockManager {
 • Escape - Закрыть меню/окна
 • Ctrl + H - Скрыть/показать панель
 • Ctrl + Q - Выход из приложения
-• Ctrl + N - Добавить приложение
 • F1 - Показать справку
 
 🚀 Быстрый запуск:
 • 1-9 - Запуск приложения по номеру
 • Левый клик - Запуск приложения
 • Правый клик - Контекстное меню
+
+📁 Добавление приложений:
+• Перетащите файл (.exe/.lnk) на dock панель
+• Или используйте раздел "Управление приложениями" в настройках
 
 💡 Навигация:
 • Enter - Подтвердить в формах
@@ -449,7 +511,7 @@ class DockManager {
 
 // Инициализация dock панели после загрузки DOM
 document.addEventListener('DOMContentLoaded', () => {
-    new DockManager();
+    window.dockManager = new DockManager();
 });
 
 // Обработка загрузки страницы
