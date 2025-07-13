@@ -12,7 +12,7 @@ function createWindow() {
     width: 600,
     height: 80,
     x: Math.round((screenWidth - 600) / 2), // Центрируем по горизонтали
-    y: screenHeight - 80, // Размещаем внизу экрана
+    y: 10, // Размещаем в верхней части экрана с небольшим отступом
     frame: false, // Убираем рамку окна
     transparent: true, // Делаем окно прозрачным
     resizable: false, // Запрещаем изменение размера

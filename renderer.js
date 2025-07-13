@@ -170,15 +170,9 @@ class DockManager {
         this.currentRightClickedItem = dockItem;
         
         const rect = dockItem.getBoundingClientRect();
-        const menuHeight = 120; // Примерная высота меню
         
         let x = rect.left + rect.width / 2;
-        let y = rect.top - menuHeight - 10;
-        
-        // Корректировка позиции, если меню выходит за границы
-        if (y < 0) {
-            y = rect.bottom + 10;
-        }
+        let y = rect.bottom + 10; // Размещаем меню снизу от dock панели
         
         this.contextMenu.style.left = `${x}px`;
         this.contextMenu.style.top = `${y}px`;

@@ -112,7 +112,7 @@ body {
 .dock-item::after {
     content: attr(data-number);
     position: absolute;
-    top: -8px;
+    bottom: -8px;
     right: -8px;
     background: rgba(0, 122, 204, 0.9);
     color: white;
@@ -140,7 +140,7 @@ body {
 /* Подсказки */
 .dock-tooltip {
     position: absolute;
-    bottom: 100%;
+    top: 100%;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.8);
@@ -152,7 +152,7 @@ body {
     opacity: 0;
     visibility: hidden;
     transition: all 0.3s ease;
-    margin-bottom: 8px;
+    margin-top: 8px;
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -160,17 +160,17 @@ body {
 .dock-tooltip::after {
     content: '';
     position: absolute;
-    top: 100%;
+    bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
     border: 5px solid transparent;
-    border-top-color: rgba(0, 0, 0, 0.8);
+    border-bottom-color: rgba(0, 0, 0, 0.8);
 }
 
 .dock-item:hover .dock-tooltip {
     opacity: 1;
     visibility: visible;
-    transform: translateX(-50%) translateY(-4px);
+    transform: translateX(-50%) translateY(4px);
 }
 
 /* Разделитель */
