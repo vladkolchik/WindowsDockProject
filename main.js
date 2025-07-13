@@ -1,7 +1,8 @@
-const { app, BrowserWindow, screen, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
 
 let mainWindow;
+let settingsWindow;
 
 function createWindow() {
   const display = screen.getPrimaryDisplay();
@@ -45,6 +46,69 @@ function createWindow() {
   });
 }
 
+function createSettingsWindow() {
+  if (settingsWindow) {
+    settingsWindow.focus();
+    return;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize;
+
+  settingsWindow = new BrowserWindow({
+    width: 500,
+    height: 600,
+    x: Math.round((screenWidth - 500) / 2),
+    y: Math.round((screenHeight - 600) / 2),
+    frame: true,
+    transparent: false,
+    resizable: false,
+    alwaysOnTop: false,
+    skipTaskbar: false,
+    title: 'Настройки Windows Dock',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: true
+    }
+  });
+
+  settingsWindow.loadFile('settings.html');
+  settingsWindow.setMenu(null);
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+}
+
+// Создание нативного контекстного меню
+function createContextMenu(hasSelectedItem = false) {
+  const template = [
+    {
+      label: 'Удалить',
+      enabled: hasSelectedItem, // Активен только если выбран элемент
+      click: () => {
+        mainWindow.webContents.send('context-menu-action', 'remove-app');
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Горячие клавиши',
+      click: () => {
+        mainWindow.webContents.send('context-menu-action', 'help');
+      }
+    },
+    {
+      label: 'Настройки',
+      click: () => {
+        mainWindow.webContents.send('context-menu-action', 'settings');
+      }
+    }
+  ];
+
+  return Menu.buildFromTemplate(template);
+}
+
 // Обработка готовности приложения
 app.whenReady().then(() => {
   createWindow();
@@ -61,6 +125,87 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+// Показ контекстного меню
+ipcMain.handle('show-context-menu', (event, x, y, hasSelectedItem = false) => {
+  const contextMenu = createContextMenu(hasSelectedItem);
+  contextMenu.popup({
+    window: mainWindow,
+    x: Math.round(x),
+    y: Math.round(y)
+  });
+});
+
+// Открытие окна настроек
+ipcMain.handle('open-settings', () => {
+  createSettingsWindow();
+});
+
+// Управление настройками
+ipcMain.handle('get-settings', () => {
+  return {
+    alwaysOnTop: mainWindow?.isAlwaysOnTop() || true,
+    hotkeys: {
+      toggleDock: 'Ctrl+H',
+      quit: 'Ctrl+Q',
+      addApp: 'Ctrl+N',
+      help: 'F1'
+    }
+  };
+});
+
+// Получение списка приложений
+ipcMain.handle('get-apps', () => {
+  if (mainWindow) {
+    return mainWindow.webContents.executeJavaScript(`
+      const dockManager = window.dockManager || {};
+      dockManager.apps || [];
+    `).catch(() => []);
+  }
+  return [];
+});
+
+// Добавление приложения
+ipcMain.handle('add-app', (event, app) => {
+  try {
+    if (mainWindow) {
+      mainWindow.webContents.send('add-app-from-settings', app);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Ошибка добавления приложения:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Удаление приложения
+ipcMain.handle('remove-app', (event, appId) => {
+  try {
+    if (mainWindow) {
+      mainWindow.webContents.send('remove-app-from-settings', appId);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Ошибка удаления приложения:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-settings', (event, settings) => {
+  try {
+    if (mainWindow) {
+      mainWindow.setAlwaysOnTop(settings.alwaysOnTop);
+    }
+    
+    // Сохраняем настройки (в реальном приложении можно использовать файл)
+    // В этой реализации настройки будут сохранены в памяти
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Ошибка сохранения настроек:', error);
+    return { success: false, error: error.message };
   }
 });
 

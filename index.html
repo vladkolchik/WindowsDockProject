@@ -60,38 +60,13 @@
         </div>
     </div>
 
-    <!-- Контекстное меню -->
-    <div id="context-menu" class="context-menu">
-        <div class="context-menu-item" data-action="add-app">Добавить приложение</div>
-        <div class="context-menu-item" data-action="remove-app">Удалить</div>
-        <div class="context-menu-separator"></div>
-        <div class="context-menu-item" data-action="help">Горячие клавиши</div>
-        <div class="context-menu-item" data-action="settings">Настройки</div>
-    </div>
 
-    <!-- Модальное окно для добавления приложений -->
-    <div id="add-app-modal" class="modal">
-        <div class="modal-content">
-            <h3>Добавить приложение</h3>
-            <form id="add-app-form">
-                <div class="form-group">
-                    <label for="app-name">Название:</label>
-                    <input type="text" id="app-name" required>
-                </div>
-                <div class="form-group">
-                    <label for="app-path">Путь к исполняемому файлу:</label>
-                    <input type="text" id="app-path" required>
-                    <button type="button" id="browse-button">Обзор</button>
-                </div>
-                <div class="form-group">
-                    <label for="app-icon">Иконка (emoji):</label>
-                    <input type="text" id="app-icon" placeholder="🚀">
-                </div>
-                <div class="form-buttons">
-                    <button type="submit">Добавить</button>
-                    <button type="button" id="cancel-button">Отмена</button>
-                </div>
-            </form>
+
+    <!-- Drag & Drop зона для добавления приложений -->
+    <div id="drag-drop-indicator" class="drag-drop-indicator">
+        <div class="drag-drop-content">
+            <span class="drag-drop-icon">📁</span>
+            <span class="drag-drop-text">Перетащите приложение сюда</span>
         </div>
     </div>
 

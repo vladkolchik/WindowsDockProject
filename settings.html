@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки Windows Dock</title>
+    <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+    <div class="settings-container">
+        <header class="settings-header">
+            <h1>⚙️ Настройки Windows Dock</h1>
+            <p>Настройте ваш dock под свои нужды</p>
+        </header>
+
+        <div class="settings-content">
+            <!-- Общие настройки -->
+            <section class="settings-section">
+                <h2>🎯 Общие настройки</h2>
+                
+                <div class="setting-item">
+                    <label for="always-on-top">
+                        <input type="checkbox" id="always-on-top" checked>
+                        <span class="setting-label">Всегда поверх других окон</span>
+                    </label>
+                    <p class="setting-description">Dock панель будет оставаться видимой поверх всех окон</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="auto-hide">
+                        <input type="checkbox" id="auto-hide">
+                        <span class="setting-label">Автоскрытие панели</span>
+                    </label>
+                    <p class="setting-description">Панель будет скрываться при потере фокуса</p>
+                </div>
+
+                <div class="setting-item">
+                    <label for="startup">
+                        <input type="checkbox" id="startup">
+                        <span class="setting-label">Запуск с Windows</span>
+                    </label>
+                    <p class="setting-description">Автоматически запускать dock при старте системы</p>
+                </div>
+            </section>
+
+            <!-- Горячие клавиши -->
+            <section class="settings-section">
+                <h2>⌨️ Горячие клавиши</h2>
+                
+                <div class="hotkey-item">
+                    <label>Показать/скрыть панель:</label>
+                    <input type="text" id="hotkey-toggle" value="Ctrl+H" readonly>
+                    <button class="hotkey-btn" data-action="toggle-dock">Изменить</button>
+                </div>
+
+                <div class="hotkey-item">
+                    <label>Выход из приложения:</label>
+                    <input type="text" id="hotkey-quit" value="Ctrl+Q" readonly>
+                    <button class="hotkey-btn" data-action="quit">Изменить</button>
+                </div>
+
+                <div class="hotkey-item">
+                    <label>Добавить приложение:</label>
+                    <input type="text" id="hotkey-add" value="Ctrl+N" readonly>
+                    <button class="hotkey-btn" data-action="add-app">Изменить</button>
+                </div>
+
+                <div class="hotkey-item">
+                    <label>Показать справку:</label>
+                    <input type="text" id="hotkey-help" value="F1" readonly>
+                    <button class="hotkey-btn" data-action="help">Изменить</button>
+                </div>
+
+                <div class="hotkey-note">
+                    <p>💡 Нажмите "Изменить" и введите новую комбинацию клавиш</p>
+                </div>
+            </section>
+
+            <!-- Управление приложениями -->
+            <section class="settings-section">
+                <h2>📱 Управление приложениями</h2>
+                
+                <div class="app-management">
+                    <div class="add-app-form">
+                        <h3>Добавить новое приложение</h3>
+                        <form id="settings-add-app-form">
+                            <div class="form-group">
+                                <label for="settings-app-name">Название:</label>
+                                <input type="text" id="settings-app-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="settings-app-path">Путь к исполняемому файлу:</label>
+                                <input type="text" id="settings-app-path" required>
+                                <button type="button" id="settings-browse-button">Обзор</button>
+                            </div>
+                            <div class="form-group">
+                                <label for="settings-app-icon">Иконка (emoji):</label>
+                                <input type="text" id="settings-app-icon" placeholder="🚀">
+                            </div>
+                            <button type="submit" class="btn-add-app">Добавить приложение</button>
+                        </form>
+                    </div>
+                    
+                    <div class="apps-list">
+                        <h3>Текущие приложения</h3>
+                        <div id="settings-apps-list" class="apps-grid">
+                            <!-- Приложения будут добавлены динамически -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Внешний вид -->
+            <section class="settings-section">
+                <h2>🎨 Внешний вид</h2>
+                
+                <div class="setting-item">
+                    <label for="theme">Тема оформления:</label>
+                    <select id="theme">
+                        <option value="auto">Автоматически</option>
+                        <option value="light">Светлая</option>
+                        <option value="dark">Тёмная</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="position">Позиция панели:</label>
+                    <select id="position">
+                        <option value="top">Верх</option>
+                        <option value="bottom">Низ</option>
+                        <option value="left">Лево</option>
+                        <option value="right">Право</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="icon-size">Размер иконок:</label>
+                    <input type="range" id="icon-size" min="32" max="64" value="48">
+                    <span id="icon-size-value">48px</span>
+                </div>
+            </section>
+
+            <!-- Информация -->
+            <section class="settings-section">
+                <h2>ℹ️ Информация</h2>
+                
+                <div class="info-item">
+                    <span class="info-label">Версия:</span>
+                    <span class="info-value">1.2.2</span>
+                </div>
+
+                <div class="info-item">
+                    <span class="info-label">Автор:</span>
+                    <span class="info-value">Windows Dock Project</span>
+                </div>
+
+                <div class="info-item">
+                    <span class="info-label">Лицензия:</span>
+                    <span class="info-value">MIT</span>
+                </div>
+            </section>
+        </div>
+
+        <footer class="settings-footer">
+            <button id="reset-btn" class="btn btn-secondary">Сбросить</button>
+            <div class="footer-buttons">
+                <button id="cancel-btn" class="btn btn-secondary">Отмена</button>
+                <button id="save-btn" class="btn btn-primary">Сохранить</button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Модальное окно для настройки горячих клавиш -->
+    <div id="hotkey-modal" class="modal">
+        <div class="modal-content">
+            <h3>Изменить горячую клавишу</h3>
+            <p>Нажмите желаемую комбинацию клавиш:</p>
+            <div class="hotkey-display" id="hotkey-display">
+                Нажмите клавиши...
+            </div>
+            <div class="modal-buttons">
+                <button id="hotkey-cancel">Отмена</button>
+                <button id="hotkey-save">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="settings.js"></script>
+</body>
+</html> 
