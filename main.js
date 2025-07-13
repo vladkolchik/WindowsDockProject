@@ -57,13 +57,17 @@ function createWindow() {
   
   // Создаем окно dock панели
   mainWindow = new BrowserWindow({
-    width: 600,
-    height: 80,
+    width: 400, // Начальная ширина
+    height: 70, // Начальная высота
+    minWidth: 180, // Минимальная ширина
+    minHeight: 50, // Минимальная высота
+    maxWidth: screenWidth, // Максимальная ширина = ширина экрана
+    maxHeight: 100, // Максимальная высота
     x: x,
     y: y,
     frame: false, // Убираем рамку окна
     transparent: true, // Делаем окно прозрачным
-    resizable: false, // Запрещаем изменение размера
+    resizable: true, // Разрешаем изменение размера программно
     alwaysOnTop: true, // Всегда поверх других окон
     skipTaskbar: true, // Не показывать в панели задач
     movable: !isWindowPinned, // Устанавливаем возможность перетаскивания
@@ -387,6 +391,81 @@ ipcMain.handle('get-window-position', () => {
   return { x: 0, y: 0 };
 });
 
+
+
+// Автоматическое изменение размера окна под dock панель
+ipcMain.handle('resize-window-to-content', async () => {
+  if (!mainWindow) return;
+  
+  try {
+    const display = screen.getPrimaryDisplay();
+    
+    // Получаем точный размер dock панели
+    const dockSize = await mainWindow.webContents.executeJavaScript(`
+      (() => {
+        const dock = document.querySelector('.dock');
+        const container = document.querySelector('.dock-container');
+        
+        if (!dock || !container) return { width: 200, height: 70 };
+        
+        // Принудительный reflow для точных размеров
+        dock.style.display = 'none';
+        dock.offsetHeight;
+        dock.style.display = 'flex';
+        
+        // Получаем реальные размеры dock панели
+        const dockRect = dock.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        
+        // Размер окна = размер dock панели + отступы контейнера
+        const width = Math.ceil(dockRect.width + 20); // 10px отступ с каждой стороны
+        const height = Math.ceil(dockRect.height + 20); // 10px отступ сверху и снизу
+        
+        console.log('Точный размер dock панели:', {
+          dockWidth: dockRect.width,
+          dockHeight: dockRect.height,
+          windowWidth: width,
+          windowHeight: height
+        });
+        
+        return { width, height };
+      })()
+    `);
+    
+    // Получаем текущие размеры и позицию
+    const currentBounds = mainWindow.getBounds();
+    const currentContentSize = mainWindow.getContentSize();
+    
+    // Центрируем окно при изменении ширины
+    let newX = currentBounds.x;
+    let newY = currentBounds.y;
+    
+    if (Math.abs(currentContentSize[0] - dockSize.width) > 2) {
+      // Центрируем по горизонтали
+      newX = currentBounds.x + (currentContentSize[0] - dockSize.width) / 2;
+      
+      // Проверяем границы экрана
+      const maxX = display.workAreaSize.width - dockSize.width;
+      newX = Math.max(0, Math.min(newX, maxX));
+    }
+    
+    // Устанавливаем размер содержимого точно под dock панель
+    mainWindow.setContentSize(dockSize.width, dockSize.height);
+    
+    // Устанавливаем позицию
+    mainWindow.setPosition(Math.round(newX), Math.round(newY));
+    
+    // Обновляем сохраненную позицию
+    windowPosition = { x: Math.round(newX), y: Math.round(newY) };
+    
+    console.log('Размер окна изменен под dock панель:', dockSize);
+    
+    return { success: true, size: dockSize };
+  } catch (error) {
+    console.error('Ошибка изменения размера окна:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 
 // Синхронное перемещение окна (абсолютное позиционирование)

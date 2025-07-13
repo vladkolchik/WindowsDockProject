@@ -17,6 +17,8 @@ class DockManager {
         // Добавляем небольшую задержку для правильного отображения номеров
         setTimeout(() => {
             this.updateAppNumbers();
+            // Изменяем размер окна после полной инициализации
+            this.resizeWindowToContent();
         }, 100);
         
         // Обработчик для нативного контекстного меню
@@ -38,13 +40,21 @@ class DockManager {
         ipcRenderer.on('add-app-from-settings', (event, app) => {
             this.apps.push(app);
             this.saveApps();
-            this.renderApps();
+            this.renderApps(); // Это уже вызовет resizeWindowToContent()
         });
 
         ipcRenderer.on('remove-app-from-settings', (event, appId) => {
             this.apps = this.apps.filter(a => a.id !== appId);
             this.saveApps();
-            this.renderApps();
+            this.renderApps(); // Это уже вызовет resizeWindowToContent()
+        });
+        
+        // Обработчик изменения размера экрана
+        window.addEventListener('resize', () => {
+            // Небольшая задержка для завершения изменения размера
+            setTimeout(() => {
+                this.resizeWindowToContent();
+            }, 200);
         });
     }
 
@@ -81,13 +91,30 @@ class DockManager {
     // Обновление визуального индикатора состояния закрепления
     updateWindowPinIndicator() {
         const dockContainer = document.querySelector('.dock-container');
+        const pinButton = document.getElementById('pin-button');
+        const pinIcon = pinButton.querySelector('.dock-icon');
+        const pinTooltip = pinButton.querySelector('.dock-tooltip');
         
         if (this.isWindowPinned) {
             dockContainer.classList.remove('unpinned');
             dockContainer.title = 'Dock закреплен';
+            
+            // Обновляем кнопку для закреплённого состояния
+            pinButton.classList.remove('unpinned');
+            pinButton.classList.add('pinned');
+            pinIcon.textContent = '📌';
+            pinTooltip.textContent = 'Закреплено (кликните чтобы открепить)';
+            pinButton.title = 'Открепить окно для перетаскивания';
         } else {
             dockContainer.classList.add('unpinned');
             dockContainer.title = 'Dock не закреплен - можно перетаскивать';
+            
+            // Обновляем кнопку для откреплённого состояния
+            pinButton.classList.remove('pinned');
+            pinButton.classList.add('unpinned');
+            pinIcon.textContent = '🔓';
+            pinTooltip.textContent = 'Откреплено (кликните чтобы закрепить)';
+            pinButton.title = 'Закрепить окно';
         }
     }
 
@@ -145,6 +172,8 @@ class DockManager {
                 e.preventDefault();
                 this.showHelp();
             }
+            
+
             
             // Цифры 1-9 - быстрый запуск приложений
             if (e.key >= '1' && e.key <= '9') {
@@ -207,6 +236,27 @@ class DockManager {
             case 'quit':
                 await ipcRenderer.invoke('quit-app');
                 break;
+            case 'toggle-pin':
+                await this.toggleWindowPin();
+                break;
+        }
+    }
+
+    // Переключение состояния закрепления окна
+    async toggleWindowPin() {
+        try {
+            const newPinState = await ipcRenderer.invoke('toggle-window-pin');
+            this.isWindowPinned = newPinState;
+            this.updateWindowPinIndicator();
+            
+            // Показываем уведомление
+            const message = this.isWindowPinned 
+                ? '📌 Окно закреплено' 
+                : '🔓 Окно откреплено - теперь можно перетаскивать';
+            this.showNotification(message, 'info');
+        } catch (error) {
+            console.error('Ошибка переключения состояния закрепления:', error);
+            this.showNotification('Ошибка переключения состояния закрепления', 'error');
         }
     }
 
@@ -335,6 +385,34 @@ class DockManager {
         }
     }
 
+    // Автоматическое изменение размера окна
+    async resizeWindowToContent() {
+        try {
+            // Небольшая задержка для завершения рендеринга
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Принудительно обновляем layout перед измерением
+            const dock = document.querySelector('.dock');
+            if (dock) {
+                dock.style.display = 'none';
+                dock.offsetHeight; // Принудительный reflow
+                dock.style.display = 'flex';
+            }
+            
+            // Еще одна небольшая задержка после reflow
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            const result = await ipcRenderer.invoke('resize-window-to-content');
+            if (!result.success) {
+                console.error('Ошибка изменения размера окна:', result.error);
+            }
+        } catch (error) {
+            console.error('Ошибка вызова изменения размера окна:', error);
+        }
+    }
+
+
+
     // Добавление приложения из файла
     addAppFromFile(file) {
         const path = file.path;
@@ -350,7 +428,7 @@ class DockManager {
 
         this.apps.push(newApp);
         this.saveApps();
-        this.renderApps();
+        this.renderApps(); // Это уже вызовет resizeWindowToContent()
         this.showNotification(`Приложение "${name}" добавлено`);
     }
 
@@ -387,7 +465,7 @@ class DockManager {
         if (app) {
             this.apps = this.apps.filter(a => a.id !== appId);
             this.saveApps();
-            this.renderApps();
+            this.renderApps(); // Это уже вызовет resizeWindowToContent()
             this.showNotification(`Приложение "${app.name}" удалено`);
         }
     }
@@ -408,6 +486,12 @@ class DockManager {
 
         // Добавляем номера для быстрого запуска
         this.updateAppNumbers();
+        
+        // Автоматически изменяем размер окна под содержимое
+        // Добавляем дополнительную задержку для завершения анимаций
+        setTimeout(() => {
+            this.resizeWindowToContent();
+        }, 100);
     }
 
     // Обновление номеров приложений для быстрого запуска
@@ -519,8 +603,11 @@ class DockManager {
 • Или используйте раздел "Управление приложениями" в настройках
 
 📌 Управление окном:
-• Правый клик → "Закрепить окно" - закрепить/открепить dock
+• Кнопка 📌/🔓 - быстрое переключение режима перетаскивания
+• Правый клик → "Закрепить окно" - альтернативный способ
 • Когда окно не закреплено, его можно перетаскивать по экрану
+• Зеленый цвет 📌 = окно закреплено (стабильное положение)
+• Жёлтый цвет 🔓 = окно можно перетаскивать
 
 💡 Навигация:
 • Enter - Подтвердить в формах
@@ -678,4 +765,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // Обработка загрузки страницы
 window.addEventListener('load', () => {
     console.log('Windows Dock загружен');
+    // Дополнительный вызов изменения размера окна после полной загрузки
+    if (window.dockManager) {
+        setTimeout(() => {
+            window.dockManager.resizeWindowToContent();
+        }, 300);
+    }
 }); 
