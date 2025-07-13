@@ -21,6 +21,94 @@ body {
     align-items: center;
     justify-content: center;
     padding: 10px;
+    position: relative;
+    animation: fadeInUp 0.5s ease-out;
+}
+
+/* Индикатор состояния закрепления */
+.dock-container.unpinned::before {
+    content: '📌';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: rgba(255, 193, 7, 0.9);
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border: 2px solid white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+    animation: pulse 2s infinite;
+}
+
+/* Изменение курсора для откреплённого окна */
+.dock-container.unpinned .dock {
+    cursor: grab;
+    border: 2px dashed rgba(255, 193, 7, 0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dock-container.unpinned .dock:hover {
+    cursor: grab;
+    border-color: rgba(255, 193, 7, 0.8);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Стиль при активном перетаскивании */
+.dock-container.unpinned .dock:active,
+.dock-container.unpinned .dock.dragging {
+    cursor: grabbing !important;
+    border-color: rgba(255, 193, 7, 1);
+    background: rgba(255, 255, 255, 0.25);
+    box-shadow: 
+        0 8px 25px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 193, 7, 0.3);
+}
+
+/* Отключение выделения текста при перетаскивании */
+.dock-container.dragging,
+.dock-container.dragging * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+}
+
+/* Оптимизация производительности при перетаскивании */
+.dock-container.dragging {
+    will-change: transform;
+    transform: translateZ(0); /* Форсируем GPU слой */
+    backface-visibility: hidden; /* Предотвращаем мигание */
+}
+
+.dock-container.dragging .dock {
+    will-change: transform, box-shadow;
+    pointer-events: none;
+    transform: translateZ(0); /* Форсируем GPU слой */
+    backface-visibility: hidden; /* Предотвращаем мигание */
+    /* Убираем все transitions при перетаскивании */
+    transition: none !important;
+}
+
+.dock-container.dragging .dock-item {
+    pointer-events: none;
+    /* Убираем все transitions при перетаскивании */
+    transition: none !important;
+}
+
+/* Дополнительная оптимизация для плавности */
+.dock-container.dragging .dock-item:hover {
+    transform: none !important; /* Отключаем hover эффекты при перетаскивании */
+}
+
+.dock-container.dragging .dock-tooltip {
+    opacity: 0 !important; /* Скрываем подсказки при перетаскивании */
+    visibility: hidden !important;
 }
 
 /* Основная dock панель */
@@ -35,16 +123,42 @@ body {
     box-shadow: 
         0 8px 32px rgba(0, 0, 0, 0.3),
         0 0 0 1px rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
     gap: 8px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: slideInFromTop 0.4s ease-out;
 }
 
 .dock:hover {
     background: rgba(255, 255, 255, 0.15);
-    transform: translateY(-2px);
     box-shadow: 
         0 12px 40px rgba(0, 0, 0, 0.4),
         0 0 0 1px rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+/* Tooltip для индикатора */
+.dock-container.unpinned::after {
+    content: 'Окно откреплено - можно перетаскивать';
+    position: absolute;
+    top: -35px;
+    right: -10px;
+    background: rgba(255, 193, 7, 0.9);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    z-index: 11;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dock-container.unpinned:hover::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-5px);
 }
 
 /* Секции dock панели */
@@ -65,9 +179,10 @@ body {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid rgba(255, 255, 255, 0.1);
     overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: fadeInScale 0.5s ease-out;
 }
 
 .dock-item::before {
@@ -87,16 +202,17 @@ body {
 }
 
 .dock-item:hover {
-    transform: scale(1.15) translateY(-4px);
     background: rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.3);
     box-shadow: 
         0 8px 25px rgba(0, 0, 0, 0.3),
         0 0 0 1px rgba(255, 255, 255, 0.2);
+    transform: translateY(-3px) scale(1.1);
 }
 
 .dock-item:active {
-    transform: scale(1.05) translateY(-2px);
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px) scale(1.05);
 }
 
 /* Иконки */
@@ -106,6 +222,11 @@ body {
     z-index: 1;
     position: relative;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dock-item:hover .dock-icon {
+    transform: scale(1.1);
 }
 
 /* Номера для быстрого запуска */
@@ -125,11 +246,11 @@ body {
     align-items: center;
     justify-content: center;
     opacity: 0;
-    transform: scale(0.8);
-    transition: all 0.3s ease;
     z-index: 2;
     border: 1px solid rgba(255, 255, 255, 0.3);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: scale(0.8);
 }
 
 .dock-item:hover::after {
@@ -151,10 +272,10 @@ body {
     white-space: nowrap;
     opacity: 0;
     visibility: hidden;
-    transition: all 0.3s ease;
     margin-top: 8px;
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dock-tooltip::after {
@@ -170,7 +291,7 @@ body {
 .dock-item:hover .dock-tooltip {
     opacity: 1;
     visibility: visible;
-    transform: translateX(-50%) translateY(4px);
+    transform: translateX(-50%) translateY(5px);
 }
 
 /* Разделитель */
@@ -179,9 +300,12 @@ body {
     height: 32px;
     background: rgba(255, 255, 255, 0.2);
     margin: 0 8px;
+    transition: height 0.3s ease;
 }
 
-
+.dock:hover .dock-separator {
+    height: 36px;
+}
 
 /* Drag & Drop индикатор */
 .drag-drop-indicator {
@@ -198,9 +322,9 @@ body {
     z-index: 3000;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.1s ease, visibility 0.1s ease;
     border: 3px dashed #007ACC;
     pointer-events: none; /* Не блокируем события мыши */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .drag-drop-indicator.show {
@@ -214,6 +338,7 @@ body {
     font-size: 18px;
     font-weight: 600;
     pointer-events: none;
+    animation: bounce 2s infinite;
 }
 
 .drag-drop-icon {
@@ -227,20 +352,61 @@ body {
     font-size: 20px;
 }
 
-/* Анимация появления dock панели */
-@keyframes dockAppear {
+/* Анимации */
+@keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateY(20px) scale(0.9);
+        transform: translateY(20px);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 }
 
-.dock {
-    animation: dockAppear 0.5s ease-out;
+@keyframes slideInFromTop {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-10px);
+    }
+    60% {
+        transform: translateY(-5px);
+    }
 }
 
 /* Адаптивность */
