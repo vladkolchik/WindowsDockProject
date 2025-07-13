@@ -129,6 +129,9 @@ windows-dock/
 ├── README.md           # Основная документация
 ├── QUICK_START.md      # Краткое руководство
 ├── HOTKEYS.md          # Полный список горячих клавиш
+├── CHANGELOG.md        # История изменений
+├── GITHUB_DEPLOY.md    # Инструкция по загрузке в GitHub
+├── LICENSE             # MIT лицензия
 └── .gitignore          # Исключения для Git
 ```
 
@@ -152,6 +155,7 @@ npm run dev
 - `F12` - DevTools (в режиме разработки)
 
 📋 **Полный список горячих клавиш**: см. файл [HOTKEYS.md](HOTKEYS.md)
+📝 **История изменений**: см. файл [CHANGELOG.md](CHANGELOG.md)
 
 ## 📋 Системные требования
 

@@ -1,6 +1,6 @@
 {
   "name": "windows-dock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Minimalist and modern dock panel for Windows 10",
   "main": "main.js",
   "scripts": {
