@@ -20,7 +20,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 10px;
+    padding: 10px; /* Минимальные отступы */
     position: relative;
     animation: fadeInUp 0.5s ease-out;
 }
@@ -56,7 +56,7 @@ body {
 .dock-container.unpinned .dock:hover {
     cursor: grab;
     border-color: rgba(255, 193, 7, 0.8);
-    background: rgba(255, 255, 255, 0.2);
+    background: transparent;
 }
 
 /* Стиль при активном перетаскивании */
@@ -64,10 +64,8 @@ body {
 .dock-container.unpinned .dock.dragging {
     cursor: grabbing !important;
     border-color: rgba(255, 193, 7, 1);
-    background: rgba(255, 255, 255, 0.25);
-    box-shadow: 
-        0 8px 25px rgba(0, 0, 0, 0.4),
-        0 0 0 1px rgba(255, 193, 7, 0.3);
+    background: transparent;
+    box-shadow: none;
 }
 
 /* Отключение выделения текста при перетаскивании */
@@ -115,25 +113,22 @@ body {
 .dock {
     display: flex;
     align-items: center;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
+    background: transparent;
+    border-radius: 0;
     padding: 8px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(255, 255, 255, 0.1);
+    border: none;
+    box-shadow: none;
     gap: 8px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     animation: slideInFromTop 0.4s ease-out;
+    width: auto; /* Автоматическая ширина под содержимое */
+    height: auto; /* Автоматическая высота под содержимое */
 }
 
 .dock:hover {
-    background: rgba(255, 255, 255, 0.15);
-    box-shadow: 
-        0 12px 40px rgba(0, 0, 0, 0.4),
-        0 0 0 1px rgba(255, 255, 255, 0.15);
-    transform: translateY(-2px);
+    background: transparent;
+    box-shadow: none;
+    transform: none;
 }
 
 /* Tooltip для индикатора */
@@ -166,6 +161,68 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: nowrap; /* Не переносить элементы на новую строку */
+    overflow: visible; /* Показывать overflow для подсказок */
+}
+
+/* Кнопка управления перетаскиванием */
+#pin-button {
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Состояние "закреплено" */
+#pin-button.pinned {
+    background: rgba(40, 167, 69, 0.15);
+    border-color: rgba(40, 167, 69, 0.3);
+}
+
+#pin-button.pinned:hover {
+    background: rgba(40, 167, 69, 0.25);
+    border-color: rgba(40, 167, 69, 0.5);
+    box-shadow: 
+        0 8px 25px rgba(40, 167, 69, 0.2),
+        0 0 0 1px rgba(40, 167, 69, 0.3);
+}
+
+#pin-button.pinned .dock-icon {
+    color: #28a745;
+    filter: drop-shadow(0 2px 4px rgba(40, 167, 69, 0.3));
+}
+
+/* Состояние "откреплено" */
+#pin-button.unpinned {
+    background: rgba(255, 193, 7, 0.15);
+    border-color: rgba(255, 193, 7, 0.3);
+    animation: pinButtonPulse 2s infinite;
+}
+
+#pin-button.unpinned:hover {
+    background: rgba(255, 193, 7, 0.25);
+    border-color: rgba(255, 193, 7, 0.5);
+    box-shadow: 
+        0 8px 25px rgba(255, 193, 7, 0.2),
+        0 0 0 1px rgba(255, 193, 7, 0.3);
+}
+
+#pin-button.unpinned .dock-icon {
+    color: #ffc107;
+    filter: drop-shadow(0 2px 4px rgba(255, 193, 7, 0.3));
+    transform: rotate(45deg);
+}
+
+/* Анимация для откреплённого состояния */
+@keyframes pinButtonPulse {
+    0%, 100% {
+        box-shadow: 
+            0 8px 25px rgba(0, 0, 0, 0.3),
+            0 0 0 1px rgba(255, 255, 255, 0.2);
+    }
+    50% {
+        box-shadow: 
+            0 8px 25px rgba(255, 193, 7, 0.3),
+            0 0 0 1px rgba(255, 193, 7, 0.4);
+    }
 }
 
 /* Элементы dock панели */
@@ -352,6 +409,8 @@ body {
     font-size: 20px;
 }
 
+
+
 /* Анимации */
 @keyframes fadeInUp {
     from {
@@ -409,11 +468,35 @@ body {
     }
 }
 
+/* Адаптивность для большого количества приложений */
+@media (max-width: 1200px) {
+    .dock-section {
+        gap: 6px;
+    }
+    
+    .dock-item {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .dock-icon {
+        font-size: 22px;
+    }
+}
+
 /* Адаптивность */
 @media (max-width: 768px) {
+    .dock-container {
+        padding: 8px;
+    }
+    
     .dock {
         padding: 6px 12px;
         gap: 6px;
+    }
+    
+    .dock-section {
+        gap: 4px;
     }
     
     .dock-item {
@@ -423,5 +506,40 @@ body {
     
     .dock-icon {
         font-size: 20px;
+    }
+    
+    .dock-separator {
+        height: 28px;
+        margin: 0 6px;
+    }
+}
+
+/* Для очень маленьких экранов */
+@media (max-width: 480px) {
+    .dock-container {
+        padding: 6px;
+    }
+    
+    .dock {
+        padding: 4px 8px;
+        gap: 4px;
+    }
+    
+    .dock-section {
+        gap: 3px;
+    }
+    
+    .dock-item {
+        width: 36px;
+        height: 36px;
+    }
+    
+    .dock-icon {
+        font-size: 18px;
+    }
+    
+    .dock-separator {
+        height: 24px;
+        margin: 0 4px;
     }
 } 
