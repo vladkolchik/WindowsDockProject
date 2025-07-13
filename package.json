@@ -1,0 +1,39 @@
+{
+  "name": "windows-dock",
+  "version": "1.0.0",
+  "description": "Minimalist and modern dock panel for Windows 10",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dev": "electron . --debug"
+  },
+  "keywords": ["dock", "windows", "electron", "taskbar"],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^24.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "node-notifier": "^10.0.0"
+  },
+  "build": {
+    "appId": "com.windowsdock.app",
+    "productName": "Windows Dock",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "renderer.js",
+      "index.html",
+      "styles.css",
+      "icons/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icons/icon.ico"
+    }
+  }
+} 
