@@ -45,6 +45,11 @@ class SettingsManager {
         try {
             this.settings = await ipcRenderer.invoke('get-settings');
             this.apps = await ipcRenderer.invoke('get-apps');
+            
+            // Отладочная информация
+            console.log('Загруженные приложения:', this.apps);
+            console.log('Количество приложений:', this.apps ? this.apps.length : 0);
+            
             this.updateUI();
             this.renderApps();
         } catch (error) {
@@ -200,7 +205,7 @@ class SettingsManager {
             
             if (result.success) {
                 this.showNotification('Настройки сохранены', 'success');
-                setTimeout(() => this.closeWindow(), 1000);
+                // Окно остается открытым для удобства пользователя
             } else {
                 this.showNotification('Ошибка сохранения настроек', 'error');
             }
@@ -275,30 +280,56 @@ class SettingsManager {
     // Отображение приложений в настройках
     renderApps() {
         const appsGrid = document.getElementById('settings-apps-list');
+        if (!appsGrid) {
+            console.error('Элемент settings-apps-list не найден!');
+            return;
+        }
+        
         appsGrid.innerHTML = '';
 
-        if (!this.apps || this.apps.length === 0) {
+        // Отладочная информация
+        console.log('renderApps вызван с:', {
+            apps: this.apps,
+            isArray: Array.isArray(this.apps),
+            length: this.apps ? this.apps.length : 'undefined'
+        });
+
+        if (!this.apps || !Array.isArray(this.apps) || this.apps.length === 0) {
+            console.log('Показываем "Нет приложений" - условие:', !this.apps, !Array.isArray(this.apps), this.apps ? this.apps.length === 0 : 'undefined');
             appsGrid.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Нет приложений</p>';
             return;
         }
 
-        this.apps.forEach(app => {
+        console.log('Отображаем приложения:', this.apps.length);
+        this.apps.forEach((app, index) => {
+            console.log(`Создаем элемент для приложения ${index}:`, app);
+            
+            if (!app || !app.id || !app.name) {
+                console.warn('Пропускаем некорректное приложение:', app);
+                return;
+            }
+            
             const appItem = document.createElement('div');
             appItem.className = 'app-item';
             appItem.innerHTML = `
-                <div class="app-item-icon">${app.icon}</div>
+                <div class="app-item-icon">${app.icon || '🚀'}</div>
                 <div class="app-item-name">${app.name}</div>
                 <button class="app-item-remove" data-app-id="${app.id}">×</button>
             `;
 
             // Обработчик удаления
-            appItem.querySelector('.app-item-remove').addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.removeAppFromSettings(app.id);
-            });
+            const removeBtn = appItem.querySelector('.app-item-remove');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.removeAppFromSettings(app.id);
+                });
+            }
 
             appsGrid.appendChild(appItem);
         });
+        
+        console.log('renderApps завершен, элементов в сетке:', appsGrid.children.length);
     }
 
     // Добавление приложения из настроек
