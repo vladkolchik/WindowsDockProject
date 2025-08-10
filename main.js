@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, shell, Menu } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, shell, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -7,6 +7,20 @@ let mainWindow;
 let settingsWindow;
 let isWindowPinned = true; // По умолчанию окно закреплено
 let windowPosition = null; // Сохраненная позиция окна
+let userSettings = {
+  alwaysOnTop: true,
+  autoHide: false,
+  startup: false,
+  theme: 'auto',
+  position: 'top',
+  iconSize: 48,
+  hotkeys: {
+    toggleDock: 'Ctrl+H',
+    quit: 'Ctrl+Q',
+    addApp: 'Ctrl+N',
+    help: 'F1'
+  }
+};
 
 // Путь к файлу настроек
 const settingsPath = path.join(os.homedir(), '.windows-dock-settings.json');
@@ -19,6 +33,16 @@ function loadSettings() {
       const settings = JSON.parse(data);
       isWindowPinned = settings.isWindowPinned !== undefined ? settings.isWindowPinned : true;
       windowPosition = settings.windowPosition || null;
+      if (settings.userSettings && typeof settings.userSettings === 'object') {
+        userSettings = {
+          ...userSettings,
+          ...settings.userSettings,
+          hotkeys: {
+            ...userSettings.hotkeys,
+            ...(settings.userSettings.hotkeys || {})
+          }
+        };
+      }
     }
   } catch (error) {
     console.error('Ошибка загрузки настроек:', error);
@@ -30,11 +54,25 @@ function saveSettings() {
   try {
     const settings = {
       isWindowPinned,
-      windowPosition: windowPosition || (mainWindow ? { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] } : null)
+      windowPosition: windowPosition || (mainWindow ? { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] } : null),
+      userSettings
     };
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   } catch (error) {
     console.error('Ошибка сохранения настроек:', error);
+  }
+}
+
+function applyStartupSetting() {
+  try {
+    // Настройка автозапуска для Windows/macOS (Electron управляет платформенной реализацией)
+    app.setLoginItemSettings({
+      openAtLogin: !!userSettings.startup,
+      path: process.execPath,
+      args: []
+    });
+  } catch (error) {
+    console.error('Не удалось применить настройку автозапуска:', error);
   }
 }
 
@@ -62,13 +100,13 @@ function createWindow() {
     minWidth: 180, // Минимальная ширина
     minHeight: 50, // Минимальная высота
     maxWidth: screenWidth, // Максимальная ширина = ширина экрана
-    maxHeight: 100, // Максимальная высота
+    maxHeight: screenHeight, // Разрешаем большую высоту для вертикального дока
     x: x,
     y: y,
     frame: false, // Убираем рамку окна
     transparent: true, // Делаем окно прозрачным
     resizable: true, // Разрешаем изменение размера программно
-    alwaysOnTop: true, // Всегда поверх других окон
+    alwaysOnTop: !!userSettings.alwaysOnTop, // Всегда поверх других окон
     skipTaskbar: true, // Не показывать в панели задач
     movable: !isWindowPinned, // Устанавливаем возможность перетаскивания
     webPreferences: {
@@ -201,6 +239,8 @@ function toggleWindowPin() {
 // Обработка готовности приложения
 app.whenReady().then(() => {
   createWindow();
+  // Применяем автозапуск согласно сохраненной настройке
+  applyStartupSetting();
   
   // На macOS приложения обычно остаются активными даже когда все окна закрыты
   app.on('activate', () => {
@@ -235,15 +275,15 @@ ipcMain.handle('open-settings', () => {
 // Управление настройками
 ipcMain.handle('get-settings', () => {
   return {
-    alwaysOnTop: mainWindow?.isAlwaysOnTop() || true,
+    alwaysOnTop: !!userSettings.alwaysOnTop,
+    autoHide: !!userSettings.autoHide,
+    startup: !!userSettings.startup,
+    theme: userSettings.theme,
+    position: userSettings.position,
+    iconSize: userSettings.iconSize,
     isWindowPinned: isWindowPinned,
     windowPosition: windowPosition,
-    hotkeys: {
-      toggleDock: 'Ctrl+H',
-      quit: 'Ctrl+Q',
-      addApp: 'Ctrl+N',
-      help: 'F1'
-    }
+    hotkeys: userSettings.hotkeys
   };
 });
 
@@ -320,13 +360,23 @@ ipcMain.handle('remove-app', (event, appId) => {
 
 ipcMain.handle('save-settings', (event, settings) => {
   try {
+    // Обновляем и применяем настройки
+    userSettings = {
+      ...userSettings,
+      ...settings,
+      hotkeys: { ...userSettings.hotkeys, ...(settings.hotkeys || {}) }
+    };
+
     if (mainWindow) {
-      mainWindow.setAlwaysOnTop(settings.alwaysOnTop);
+      mainWindow.setAlwaysOnTop(!!userSettings.alwaysOnTop);
     }
-    
-    // Сохраняем настройки (в реальном приложении можно использовать файл)
-    // В этой реализации настройки будут сохранены в памяти
-    
+
+    // Применяем автозапуск
+    applyStartupSetting();
+
+    // Сохраняем на диск
+    saveSettings();
+
     return { success: true };
   } catch (error) {
     console.error('Ошибка сохранения настроек:', error);
@@ -351,6 +401,40 @@ ipcMain.handle('open-url', async (event, url) => {
     return { success: true };
   } catch (error) {
     console.error('Ошибка открытия URL:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Получение нативной иконки файла (Windows/платформенная)
+ipcMain.handle('get-native-icon', async (event, filePath, size = 'large') => {
+  try {
+    if (!filePath || typeof filePath !== 'string') {
+      return { success: false, error: 'Invalid path' };
+    }
+
+    // Electron: app.getFileIcon(path, { size: 'small' | 'normal' | 'large' })
+    // На Windows корректно возвращает системную иконку файла/приложения
+    let icon = null;
+    try {
+      icon = await app.getFileIcon(filePath, { size });
+    } catch (e) {
+      // Fallback: попробовать загрузить как изображение напрямую
+      try {
+        icon = nativeImage.createFromPath(filePath);
+      } catch {
+        /* noop */
+      }
+    }
+
+    if (icon && !icon.isEmpty()) {
+      // Немного уменьшим до удобного размера для дока
+      const resized = icon.resize({ width: 32, height: 32 });
+      const dataUrl = resized.toDataURL();
+      return { success: true, dataUrl };
+    }
+    return { success: false, error: 'Icon not found' };
+  } catch (error) {
+    console.error('Ошибка получения нативной иконки:', error);
     return { success: false, error: error.message };
   }
 });
@@ -392,13 +476,109 @@ ipcMain.handle('get-window-position', () => {
 });
 
 
+// Прилипание окна к краям экрана и ориентация дока
+ipcMain.handle('snap-window', () => {
+  if (!mainWindow) return { snapped: false };
+
+  try {
+    const currentBounds = mainWindow.getBounds();
+    const display = screen.getDisplayNearestPoint({
+      x: currentBounds.x + Math.floor(currentBounds.width / 2),
+      y: currentBounds.y + Math.floor(currentBounds.height / 2)
+    });
+    const workArea = display.workArea; // { x, y, width, height }
+    const bounds = currentBounds;
+
+    const margin = 10;
+    // Уменьшаем порог прилипания, чтобы левый край не срабатывал слишком рано
+    const threshold = 24; // раньше было 64
+
+    // Используем неотрицательные расстояния: если окно уже заехало за край,
+    // считаем расстояние 0, чтобы снап сработал
+    const distances = {
+      left: Math.max(0, bounds.x - workArea.x),
+      right: Math.max(0, (workArea.x + workArea.width) - (bounds.x + bounds.width)),
+      top: Math.max(0, bounds.y - workArea.y),
+      bottom: Math.max(0, (workArea.y + workArea.height) - (bounds.y + bounds.height))
+    };
+
+    let nearestEdge = 'left';
+    let minDist = Infinity;
+    for (const [edge, dist] of Object.entries(distances)) {
+      if (dist < minDist) {
+        minDist = dist;
+        nearestEdge = edge;
+      }
+    }
+
+    if (minDist > threshold) {
+      // Не меняем ориентацию, пока реально не прилипли
+      return { snapped: false };
+    }
+
+    let newX = bounds.x;
+    let newY = bounds.y;
+    let orientation = 'horizontal';
+
+    if (nearestEdge === 'left') {
+      newX = workArea.x + margin;
+      newY = Math.min(
+        Math.max(bounds.y, workArea.y + margin),
+        workArea.y + workArea.height - bounds.height - margin
+      );
+      orientation = 'vertical';
+    } else if (nearestEdge === 'right') {
+      newX = workArea.x + workArea.width - bounds.width - margin;
+      newY = Math.min(
+        Math.max(bounds.y, workArea.y + margin),
+        workArea.y + workArea.height - bounds.height - margin
+      );
+      orientation = 'vertical';
+    } else if (nearestEdge === 'top') {
+      newY = workArea.y + margin;
+      newX = Math.min(
+        Math.max(bounds.x, workArea.x + margin),
+        workArea.x + workArea.width - bounds.width - margin
+      );
+      orientation = 'horizontal';
+    } else if (nearestEdge === 'bottom') {
+      newY = workArea.y + workArea.height - bounds.height - margin;
+      newX = Math.min(
+        Math.max(bounds.x, workArea.x + margin),
+        workArea.x + workArea.width - bounds.width - margin
+      );
+      orientation = 'horizontal';
+    }
+
+    mainWindow.setPosition(Math.round(newX), Math.round(newY));
+
+    // Обновляем сохраненную позицию
+    windowPosition = { x: Math.round(newX), y: Math.round(newY) };
+    saveSettings();
+
+    // Уведомляем renderer
+    mainWindow.webContents.send('window-snapped', { edge: nearestEdge, orientation });
+    return { snapped: true, edge: nearestEdge, orientation };
+  } catch (error) {
+    console.error('Ошибка прилипания окна:', error);
+    return { snapped: false, error: error.message };
+  }
+});
+
+
 
 // Автоматическое изменение размера окна под dock панель
-ipcMain.handle('resize-window-to-content', async () => {
+ipcMain.handle('resize-window-to-content', async (_event, opts = {}) => {
   if (!mainWindow) return;
   
   try {
-    const display = screen.getPrimaryDisplay();
+    // Получаем текущие границы окна
+    const currentBounds = mainWindow.getBounds();
+    // Определяем дисплей рядом с окном
+    const display = screen.getDisplayNearestPoint({
+      x: currentBounds.x + Math.floor(currentBounds.width / 2),
+      y: currentBounds.y + Math.floor(currentBounds.height / 2)
+    });
     
     // Получаем точный размер dock панели
     const dockSize = await mainWindow.webContents.executeJavaScript(`
@@ -408,10 +588,8 @@ ipcMain.handle('resize-window-to-content', async () => {
         
         if (!dock || !container) return { width: 200, height: 70 };
         
-        // Принудительный reflow для точных размеров
-        dock.style.display = 'none';
-        dock.offsetHeight;
-        dock.style.display = 'flex';
+        // Мягкий принудительный reflow без скрытия (избегаем визуального мерцания)
+        void dock.offsetWidth;
         
         // Получаем реальные размеры dock панели
         const dockRect = dock.getBoundingClientRect();
@@ -432,21 +610,30 @@ ipcMain.handle('resize-window-to-content', async () => {
       })()
     `);
     
-    // Получаем текущие размеры и позицию
-    const currentBounds = mainWindow.getBounds();
+    // Текущий размер контента
     const currentContentSize = mainWindow.getContentSize();
     
-    // Центрируем окно при изменении ширины
+    // Центрируем окно при изменении ширины, но сохраняем якорный край если указан
     let newX = currentBounds.x;
     let newY = currentBounds.y;
     
     if (Math.abs(currentContentSize[0] - dockSize.width) > 2) {
-      // Центрируем по горизонтали
-      newX = currentBounds.x + (currentContentSize[0] - dockSize.width) / 2;
-      
-      // Проверяем границы экрана
-      const maxX = display.workAreaSize.width - dockSize.width;
-      newX = Math.max(0, Math.min(newX, maxX));
+      const anchor = opts.anchor; // 'left' | 'right' | 'top' | 'bottom' | null
+      if (anchor === 'left') {
+        // При левом крае фиксируем левую границу и только меняем ширину
+        newX = display.workArea.x + 10; // тот же margin, что и при снапе
+      } else if (anchor === 'right') {
+        // При правом крае фиксируем правую границу
+        newX = display.workArea.x + display.workArea.width - dockSize.width - 10;
+      } else {
+        // Иначе центрируем по горизонтали относительно текущего положения
+        newX = currentBounds.x + (currentContentSize[0] - dockSize.width) / 2;
+      }
+
+      // Проверяем границы конкретного дисплея (c учётом workArea.x)
+      const maxX = display.workArea.x + display.workArea.width - dockSize.width;
+      const minX = display.workArea.x;
+      newX = Math.max(minX, Math.min(newX, maxX));
     }
     
     // Устанавливаем размер содержимого точно под dock панель

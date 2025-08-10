@@ -104,10 +104,7 @@ body {
     transform: none !important; /* Отключаем hover эффекты при перетаскивании */
 }
 
-.dock-container.dragging .dock-tooltip {
-    opacity: 0 !important; /* Скрываем подсказки при перетаскивании */
-    visibility: hidden !important;
-}
+/* Скрываем любые устаревшие подсказки при перетаскивании (если останутся) */
 
 /* Основная dock панель */
 .dock {
@@ -125,36 +122,22 @@ body {
     height: auto; /* Автоматическая высота под содержимое */
 }
 
+/* Ориентации дока */
+.dock.horizontal {
+    flex-direction: row;
+}
+
+.dock.vertical {
+    flex-direction: column;
+}
+
 .dock:hover {
     background: transparent;
     box-shadow: none;
     transform: none;
 }
 
-/* Tooltip для индикатора */
-.dock-container.unpinned::after {
-    content: 'Окно откреплено - можно перетаскивать';
-    position: absolute;
-    top: -35px;
-    right: -10px;
-    background: rgba(255, 193, 7, 0.9);
-    color: white;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 12px;
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    z-index: 11;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.dock-container.unpinned:hover::after {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(-5px);
-}
+/* Убраны CSS-подсказки внутри окна в пользу нативных уведомлений */
 
 /* Секции dock панели */
 .dock-section {
@@ -163,6 +146,11 @@ body {
     gap: 8px;
     flex-wrap: nowrap; /* Не переносить элементы на новую строку */
     overflow: visible; /* Показывать overflow для подсказок */
+}
+
+/* В вертикальном режиме секции выстраиваются в колонку, а разделитель поворачивается */
+.dock.vertical .dock-section {
+    flex-direction: column;
 }
 
 /* Кнопка управления перетаскиванием */
@@ -282,6 +270,15 @@ body {
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Для нативных иконок-изображений */
+.dock-icon-img {
+    width: 24px;
+    height: 24px;
+    image-rendering: -webkit-optimize-contrast;
+    -webkit-user-drag: none;
+    pointer-events: none;
+}
+
 .dock-item:hover .dock-icon {
     transform: scale(1.1);
 }
@@ -315,41 +312,7 @@ body {
     transform: scale(1);
 }
 
-/* Подсказки */
-.dock-tooltip {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 12px;
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    margin-top: 8px;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.dock-tooltip::after {
-    content: '';
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-bottom-color: rgba(0, 0, 0, 0.8);
-}
-
-.dock-item:hover .dock-tooltip {
-    opacity: 1;
-    visibility: visible;
-    transform: translateX(-50%) translateY(5px);
-}
+/* Удалены .dock-tooltip стили */
 
 /* Разделитель */
 .dock-separator {
@@ -362,6 +325,17 @@ body {
 
 .dock:hover .dock-separator {
     height: 36px;
+}
+
+.dock.vertical .dock-separator {
+    width: 32px;
+    height: 1px;
+    margin: 8px 0;
+    transition: width 0.3s ease;
+}
+
+.dock.vertical:hover .dock-separator {
+    width: 36px;
 }
 
 /* Drag & Drop индикатор */
@@ -392,21 +366,32 @@ body {
 .drag-drop-content {
     text-align: center;
     color: #007ACC;
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 600;
     pointer-events: none;
     animation: bounce 2s infinite;
+    /* Ограничиваем ширину, чтобы контент не выходил за границы окна док-бара */
+    max-width: calc(100% - 32px);
+    box-sizing: border-box;
+    padding: 6px 8px;
 }
 
 .drag-drop-icon {
     display: block;
-    font-size: 48px;
-    margin-bottom: 16px;
+    font-size: 28px;
+    line-height: 1;
+    margin-bottom: 8px;
 }
 
 .drag-drop-text {
     display: block;
-    font-size: 20px;
+    /* Адаптивный размер шрифта, чтобы помещалось даже на узком доке */
+    font-size: clamp(11px, 1.8vw, 14px);
+    /* Разрешаем перенос слов и строк внутри узкого окна */
+    white-space: normal;
+    overflow-wrap: anywhere; /* современная альтернатива word-wrap: break-word */
+    word-break: break-word;
+    line-height: 1.25;
 }
 
 
