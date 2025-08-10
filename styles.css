@@ -20,7 +20,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 10px; /* Минимальные отступы */
+    padding: 10px 0; /* Минимальные отступы по вертикали */
     position: relative;
     animation: fadeInUp 0.5s ease-out;
 }

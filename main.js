@@ -415,10 +415,9 @@ ipcMain.handle('resize-window-to-content', async () => {
         
         // Получаем реальные размеры dock панели
         const dockRect = dock.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         
-        // Размер окна = размер dock панели + отступы контейнера
-        const width = Math.ceil(dockRect.width + 20); // 10px отступ с каждой стороны
+        // Размер окна = размер dock панели + вертикальные отступы контейнера
+        const width = Math.ceil(dockRect.width); // без горизонтальных отступов
         const height = Math.ceil(dockRect.height + 20); // 10px отступ сверху и снизу
         
         console.log('Точный размер dock панели:', {
