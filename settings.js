@@ -243,38 +243,21 @@ class SettingsManager {
     }
 
     showNotification(message, type = 'info') {
-        // Создаем простое уведомление
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        
-        // Стили для уведомления
-        Object.assign(notification.style, {
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            background: type === 'error' ? '#ff4444' : type === 'success' ? '#28a745' : '#007ACC',
-            color: 'white',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            zIndex: '3000',
-            fontSize: '14px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-            transition: 'all 0.3s ease'
-        });
-
-        document.body.appendChild(notification);
-
-        // Удаляем уведомление через 3 секунды
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transform = 'translateX(100%)';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
+        try {
+            const title = type === 'error' ? 'Ошибка' : (type === 'success' ? 'Готово' : 'Windows Dock');
+            const show = () => new Notification(title, { body: message, silent: true });
+            if (typeof Notification !== 'undefined') {
+                if (Notification.permission === 'granted') {
+                    show();
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission().then((perm) => {
+                        if (perm === 'granted') show();
+                    }).catch(() => {});
                 }
-            }, 300);
-        }, 3000);
+            }
+        } catch (error) {
+            console.error('Ошибка показа нативного уведомления (settings):', error);
+        }
     }
 
     // Отображение приложений в настройках
@@ -312,10 +295,37 @@ class SettingsManager {
             const appItem = document.createElement('div');
             appItem.className = 'app-item';
             appItem.innerHTML = `
-                <div class="app-item-icon">${app.icon || '🚀'}</div>
+                <div class="app-item-icon"></div>
                 <div class="app-item-name">${app.name}</div>
                 <button class="app-item-remove" data-app-id="${app.id}">×</button>
             `;
+
+            // Подгружаем нативную иконку если есть путь
+            const iconHolder = appItem.querySelector('.app-item-icon');
+            if (iconHolder) {
+                if (app.path) {
+                    ipcRenderer.invoke('get-native-icon', app.path, 'large')
+                        .then((res) => {
+                            if (res && res.success && res.dataUrl) {
+                                const img = document.createElement('img');
+                                img.src = res.dataUrl;
+                                img.alt = app.name || '';
+                                img.draggable = false;
+                                img.style.width = '24px';
+                                img.style.height = '24px';
+                                img.style.verticalAlign = 'middle';
+                                iconHolder.replaceChildren(img);
+                            } else {
+                                iconHolder.textContent = app.icon || '🚀';
+                            }
+                        })
+                        .catch(() => {
+                            iconHolder.textContent = app.icon || '🚀';
+                        });
+                } else {
+                    iconHolder.textContent = app.icon || '🚀';
+                }
+            }
 
             // Обработчик удаления
             const removeBtn = appItem.querySelector('.app-item-remove');

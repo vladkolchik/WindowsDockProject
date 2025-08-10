@@ -93,28 +93,21 @@ class DockManager {
         const dockContainer = document.querySelector('.dock-container');
         const pinButton = document.getElementById('pin-button');
         const pinIcon = pinButton.querySelector('.dock-icon');
-        const pinTooltip = pinButton.querySelector('.dock-tooltip');
         
         if (this.isWindowPinned) {
             dockContainer.classList.remove('unpinned');
-            dockContainer.title = 'Dock закреплен';
             
             // Обновляем кнопку для закреплённого состояния
             pinButton.classList.remove('unpinned');
             pinButton.classList.add('pinned');
             pinIcon.textContent = '📌';
-            pinTooltip.textContent = 'Закреплено (кликните чтобы открепить)';
-            pinButton.title = 'Открепить окно для перетаскивания';
         } else {
             dockContainer.classList.add('unpinned');
-            dockContainer.title = 'Dock не закреплен - можно перетаскивать';
             
             // Обновляем кнопку для откреплённого состояния
             pinButton.classList.remove('pinned');
             pinButton.classList.add('unpinned');
             pinIcon.textContent = '🔓';
-            pinTooltip.textContent = 'Откреплено (кликните чтобы закрепить)';
-            pinButton.title = 'Закрепить окно';
         }
     }
 
@@ -125,6 +118,13 @@ class DockManager {
             const dockItem = e.target.closest('.dock-item');
             if (dockItem) {
                 this.handleDockItemClick(dockItem);
+            }
+        });
+
+        // Смена ориентации по событию из main, если нужно
+        ipcRenderer.on('window-snapped', (event, data) => {
+            if (data && data.orientation) {
+                this.setOrientation(data.orientation);
             }
         });
 
@@ -385,30 +385,28 @@ class DockManager {
         }
     }
 
-    // Автоматическое изменение размера окна
-    async resizeWindowToContent() {
-        try {
-            // Небольшая задержка для завершения рендеринга
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
-            // Принудительно обновляем layout перед измерением
-            const dock = document.querySelector('.dock');
-            if (dock) {
-                dock.style.display = 'none';
-                dock.offsetHeight; // Принудительный reflow
-                dock.style.display = 'flex';
-            }
-            
-            // Еще одна небольшая задержка после reflow
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
-            const result = await ipcRenderer.invoke('resize-window-to-content');
-            if (!result.success) {
-                console.error('Ошибка изменения размера окна:', result.error);
-            }
-        } catch (error) {
-            console.error('Ошибка вызова изменения размера окна:', error);
+    // Автоматическое изменение размера окна (с дебаунсом и без скрытия контента)
+    async resizeWindowToContent(anchorEdge) {
+        // Дебаунсируем частые вызовы, чтобы избежать мигания
+        if (this._resizeDebounceTimer) {
+            clearTimeout(this._resizeDebounceTimer);
         }
+        this._resizeDebounceTimer = setTimeout(async () => {
+            try {
+                // Гарантируем наличие класса ориентации (по умолчанию горизонтальная)
+                const dock = document.querySelector('.dock');
+                if (dock && !dock.classList.contains('horizontal') && !dock.classList.contains('vertical')) {
+                    dock.classList.add('horizontal');
+                }
+
+                const result = await ipcRenderer.invoke('resize-window-to-content', { anchor: anchorEdge || this._lastSnapEdge || null });
+                if (!result || !result.success) {
+                    console.error('Ошибка изменения размера окна:', result && result.error);
+                }
+            } catch (error) {
+                console.error('Ошибка вызова изменения размера окна:', error);
+            }
+        }, 120);
     }
 
 
@@ -511,56 +509,73 @@ class DockManager {
         const dockItem = document.createElement('div');
         dockItem.className = 'dock-item';
         dockItem.dataset.app = app.id;
-        dockItem.title = app.name;
+        // Нативная (системная) подсказка через атрибут title
+        try {
+            const pathMod = require('path');
+            const fileName = app?.path ? pathMod.basename(app.path) : (app?.name || '');
+            dockItem.title = fileName || app?.name || '';
+        } catch {
+            dockItem.title = app?.name || '';
+        }
 
         const dockIcon = document.createElement('div');
         dockIcon.className = 'dock-icon';
-        dockIcon.textContent = app.icon;
-
-        const dockTooltip = document.createElement('div');
-        dockTooltip.className = 'dock-tooltip';
-        dockTooltip.textContent = app.name;
+        // Если у приложения есть путь — попробуем подгрузить нативную иконку
+        if (app.path) {
+            this.loadNativeIcon(app.path).then((dataUrl) => {
+                if (dataUrl) {
+                    const img = document.createElement('img');
+                    img.src = dataUrl;
+                    img.alt = app.name || '';
+                    img.draggable = false;
+                    img.className = 'dock-icon-img';
+                    dockIcon.replaceChildren(img);
+                } else {
+                    dockIcon.textContent = app.icon || '🚀';
+                }
+            }).catch(() => {
+                dockIcon.textContent = app.icon || '🚀';
+            });
+        } else {
+            dockIcon.textContent = app.icon || '🚀';
+        }
 
         dockItem.appendChild(dockIcon);
-        dockItem.appendChild(dockTooltip);
 
         return dockItem;
     }
 
-    // Показ уведомлений
+    // Запрос нативной иконки через main процесс
+    async loadNativeIcon(filePath) {
+        try {
+            const result = await ipcRenderer.invoke('get-native-icon', filePath, 'large');
+            if (result && result.success && result.dataUrl) {
+                return result.dataUrl;
+            }
+            return null;
+        } catch (error) {
+            console.error('Ошибка загрузки нативной иконки:', error);
+            return null;
+        }
+    }
+
+    // Показ нативных уведомлений (Windows Toast via Notification API)
     showNotification(message, type = 'info') {
-        // Создаем простое уведомление
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        
-        // Стили для уведомления
-        Object.assign(notification.style, {
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            background: type === 'error' ? '#ff4444' : '#007ACC',
-            color: 'white',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            zIndex: '3000',
-            fontSize: '14px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-            transition: 'all 0.3s ease'
-        });
-
-        document.body.appendChild(notification);
-
-        // Удаляем уведомление через 3 секунды
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transform = 'translateX(100%)';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
+        try {
+            const title = type === 'error' ? 'Ошибка' : (type === 'success' ? 'Готово' : 'Windows Dock');
+            const show = () => new Notification(title, { body: message, silent: true });
+            if (typeof Notification !== 'undefined') {
+                if (Notification.permission === 'granted') {
+                    show();
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission().then((perm) => {
+                        if (perm === 'granted') show();
+                    }).catch(() => {});
                 }
-            }, 300);
-        }, 3000);
+            }
+        } catch (error) {
+            console.error('Ошибка показа нативного уведомления:', error);
+        }
     }
 
     // Показ настроек
@@ -714,6 +729,9 @@ class DockManager {
                 dockContainer.style.userSelect = '';
                 document.body.style.pointerEvents = '';
                 dockContainer.style.pointerEvents = '';
+
+                // После завершения перетаскивания сразу пробуем прилипнуть к ближайшему краю
+                setTimeout(() => this.snapToEdge(), 0);
             }
         });
 
@@ -733,6 +751,9 @@ class DockManager {
                 dockContainer.style.userSelect = '';
                 document.body.style.pointerEvents = '';
                 dockContainer.style.pointerEvents = '';
+
+                // Попытка снапа при потере фокуса (на всякий случай)
+                setTimeout(() => this.snapToEdge(), 0);
             }
         });
 
@@ -752,8 +773,35 @@ class DockManager {
                 dockContainer.style.userSelect = '';
                 document.body.style.pointerEvents = '';
                 dockContainer.style.pointerEvents = '';
+
+                // Попытка снапа по Esc
+                setTimeout(() => this.snapToEdge(), 0);
             }
         });
+    }
+
+    // Вызов прилипания и установка ориентации
+    async snapToEdge() {
+        try {
+            const result = await ipcRenderer.invoke('snap-window');
+            // Меняем ориентацию ТОЛЬКО при реальном прилипания к краю
+            if (result && result.snapped && result.orientation) {
+                this._lastSnapEdge = result.edge || null;
+                this.setOrientation(result.orientation);
+            }
+        } catch (error) {
+            console.error('Ошибка снапа окна:', error);
+        }
+    }
+
+    // Установка ориентации дока: horizontal | vertical
+    setOrientation(orientation) {
+        const dock = document.querySelector('.dock');
+        if (!dock) return;
+        dock.classList.toggle('vertical', orientation === 'vertical');
+        dock.classList.toggle('horizontal', orientation !== 'vertical');
+        // Пересчитать и подогнать окно под контент
+        this.resizeWindowToContent(this._lastSnapEdge);
     }
 }
 
