@@ -16,6 +16,10 @@
     --dock-shadow: rgba(0, 0, 0, 0.3);
     --dock-icon-shadow: rgba(0, 0, 0, 0.3);
     --dock-separator: rgba(255, 255, 255, 0.2);
+    --dock-shell-bg: rgba(255, 255, 255, 0.14);
+    --dock-shell-border: rgba(255, 255, 255, 0.22);
+    --dock-shell-shadow: 0 22px 40px rgba(22, 25, 31, 0.35);
+    --dock-shell-backdrop: blur(24px) saturate(170%);
 }
 
 /* Тёмная тема */
@@ -27,6 +31,10 @@ body.theme-dark {
     --dock-shadow: rgba(0, 0, 0, 0.5);
     --dock-icon-shadow: rgba(0, 0, 0, 0.5);
     --dock-separator: rgba(255, 255, 255, 0.25);
+    --dock-shell-bg: rgba(24, 27, 34, 0.55);
+    --dock-shell-border: rgba(255, 255, 255, 0.12);
+    --dock-shell-shadow: 0 24px 48px rgba(10, 12, 18, 0.55);
+    --dock-shell-backdrop: blur(28px) saturate(180%);
 }
 
 /* Светлая тема (явно) */
@@ -38,6 +46,10 @@ body.theme-light {
     --dock-shadow: rgba(0, 0, 0, 0.3);
     --dock-icon-shadow: rgba(0, 0, 0, 0.3);
     --dock-separator: rgba(255, 255, 255, 0.2);
+    --dock-shell-bg: rgba(255, 255, 255, 0.2);
+    --dock-shell-border: rgba(255, 255, 255, 0.35);
+    --dock-shell-shadow: 0 22px 40px rgba(30, 35, 45, 0.25);
+    --dock-shell-backdrop: blur(24px) saturate(160%);
 }
 
 body {
@@ -46,18 +58,29 @@ body {
     overflow: hidden;
     user-select: none;
     cursor: default;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
 }
 
 /* Контейнер dock панели */
 .dock-container {
-    width: 100%;
-    height: 100%;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 10px; /* Минимальные отступы */
+    padding: calc(10px * var(--dock-scale));
     position: relative;
-    animation: fadeInUp 0.5s ease-out;
+    animation: fadeInUp 0.4s ease-out;
+    background: var(--dock-shell-bg);
+    border-radius: calc(22px * var(--dock-scale));
+    border: 1px solid var(--dock-shell-border);
+    box-shadow: var(--dock-shell-shadow);
+    backdrop-filter: var(--dock-shell-backdrop);
+    -webkit-backdrop-filter: var(--dock-shell-backdrop);
+    gap: calc(6px * var(--dock-scale));
+    pointer-events: auto;
 }
 
 /* Индикатор состояния закрепления */
@@ -81,26 +104,28 @@ body {
     animation: pulse 2s infinite;
 }
 
-/* Изменение курсора для откреплённого окна */
-.dock-container.unpinned .dock {
+/* Изменение курсора и индикация для откреплённого окна */
+.dock-container.unpinned {
     cursor: grab;
-    border: 2px dashed rgba(255, 193, 7, 0.5);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-color: rgba(255, 193, 7, 0.35);
+    box-shadow:
+        0 20px 40px rgba(255, 193, 7, 0.18),
+        0 0 0 1px rgba(255, 193, 7, 0.28),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
-.dock-container.unpinned .dock:hover {
+.dock-container.unpinned:hover {
     cursor: grab;
-    border-color: rgba(255, 193, 7, 0.8);
-    background: transparent;
+    border-color: rgba(255, 193, 7, 0.5);
 }
 
-/* Стиль при активном перетаскивании */
-.dock-container.unpinned .dock:active,
-.dock-container.unpinned .dock.dragging {
+.dock-container.unpinned:active,
+.dock-container.unpinned.dragging {
     cursor: grabbing !important;
-    border-color: rgba(255, 193, 7, 1);
-    background: transparent;
-    box-shadow: none;
+    box-shadow:
+        0 16px 32px rgba(255, 193, 7, 0.2),
+        0 0 0 2px rgba(255, 193, 7, 0.45),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
 /* Отключение выделения текста при перетаскивании */
@@ -146,15 +171,15 @@ body {
     display: flex;
     align-items: center;
     background: transparent;
-    border-radius: 0;
-    padding: calc(8px * var(--dock-scale)) calc(16px * var(--dock-scale));
+    border-radius: calc(16px * var(--dock-scale));
+    padding: 0;
     border: none;
     box-shadow: none;
-    gap: calc(8px * var(--dock-scale));
+    gap: calc(10px * var(--dock-scale));
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    animation: slideInFromTop 0.4s ease-out;
-    width: auto; /* Автоматическая ширина под содержимое */
-    height: auto; /* Автоматическая высота под содержимое */
+    animation: slideInFromTop 0.35s ease-out;
+    width: auto;
+    height: auto;
 }
 
 /* Ориентации дока */
@@ -172,7 +197,7 @@ body {
     transform: none;
 }
 
-/* Убраны CSS-подсказки внутри окна в пользу нативных уведомлений */
+/* CSS-подсказки внутри окна убраны */
 
 /* Секции dock панели */
 .dock-section {
@@ -186,6 +211,16 @@ body {
 /* В вертикальном режиме секции выстраиваются в колонку, а разделитель поворачивается */
 .dock.vertical .dock-section {
     flex-direction: column;
+}
+
+.dock-container.vertical {
+    flex-direction: column;
+    border-radius: calc(26px * var(--dock-scale));
+}
+
+.dock-container.vertical .dock {
+    flex-direction: column;
+    gap: calc(12px * var(--dock-scale));
 }
 
 /* Кнопка управления перетаскиванием */

@@ -80,43 +80,93 @@ function applyStartupSetting() {
   }
 }
 
+// Поиск дисплея, на котором находится позиция
+function findDisplayForPosition(x, y) {
+  try {
+    // Используем getDisplayNearestPoint для поиска ближайшего дисплея
+    return screen.getDisplayNearestPoint({ x, y });
+  } catch (error) {
+    console.error('Ошибка поиска дисплея:', error);
+    // Fallback: возвращаем основной дисплей
+    return screen.getPrimaryDisplay();
+  }
+}
+
+// Проверка, находится ли позиция в пределах любого дисплея
+function isPositionOnAnyDisplay(x, y) {
+  try {
+    const displays = screen.getAllDisplays();
+    for (const display of displays) {
+      const { bounds } = display;
+      if (x >= bounds.x && x < bounds.x + bounds.width &&
+          y >= bounds.y && y < bounds.y + bounds.height) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('Ошибка проверки позиции:', error);
+    return false;
+  }
+}
+
 // Применение позиции окна согласно настройке
-function applyWindowPosition() {
+function applyWindowPosition(useSavedPosition = false) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   
-  const display = screen.getPrimaryDisplay();
-  const workArea = display.workArea;
   const bounds = mainWindow.getBounds();
-  
   let x, y;
   const margin = 10;
   
-  switch (userSettings.position) {
-    case 'top':
-      x = workArea.x + Math.round((workArea.width - bounds.width) / 2);
-      y = workArea.y + margin;
-      break;
-    case 'bottom':
-      x = workArea.x + Math.round((workArea.width - bounds.width) / 2);
-      y = workArea.y + workArea.height - bounds.height - margin;
-      break;
-    case 'left':
-      x = workArea.x + margin;
-      y = workArea.y + Math.round((workArea.height - bounds.height) / 2);
-      break;
-    case 'right':
-      x = workArea.x + workArea.width - bounds.width - margin;
-      y = workArea.y + Math.round((workArea.height - bounds.height) / 2);
-      break;
-    default:
-      // Используем сохраненную позицию или позицию по умолчанию
-      if (windowPosition) {
-        x = windowPosition.x;
-        y = windowPosition.y;
-      } else {
+  // Если требуется использовать сохраненную позицию и она есть, используем её
+  if (useSavedPosition && windowPosition) {
+    // Определяем дисплей, на котором находится сохраненная позиция
+    const display = findDisplayForPosition(windowPosition.x, windowPosition.y);
+    const workArea = display.workArea;
+    
+    // Проверяем, что позиция находится в пределах рабочей области этого дисплея
+    const savedX = Math.max(workArea.x, Math.min(windowPosition.x, workArea.x + workArea.width - bounds.width));
+    const savedY = Math.max(workArea.y, Math.min(windowPosition.y, workArea.y + workArea.height - bounds.height));
+    x = savedX;
+    y = savedY;
+  } else {
+    // Применяем позицию согласно настройке на текущем дисплее окна
+    const currentBounds = mainWindow.getBounds();
+    const display = screen.getDisplayNearestPoint({
+      x: currentBounds.x + Math.floor(currentBounds.width / 2),
+      y: currentBounds.y + Math.floor(currentBounds.height / 2)
+    });
+    const workArea = display.workArea;
+    
+    switch (userSettings.position) {
+      case 'top':
         x = workArea.x + Math.round((workArea.width - bounds.width) / 2);
         y = workArea.y + margin;
-      }
+        break;
+      case 'bottom':
+        x = workArea.x + Math.round((workArea.width - bounds.width) / 2);
+        y = workArea.y + workArea.height - bounds.height - margin;
+        break;
+      case 'left':
+        x = workArea.x + margin;
+        y = workArea.y + Math.round((workArea.height - bounds.height) / 2);
+        break;
+      case 'right':
+        x = workArea.x + workArea.width - bounds.width - margin;
+        y = workArea.y + Math.round((workArea.height - bounds.height) / 2);
+        break;
+      default:
+        // Используем сохраненную позицию или позицию по умолчанию
+        if (windowPosition && isPositionOnAnyDisplay(windowPosition.x, windowPosition.y)) {
+          const displayForPos = findDisplayForPosition(windowPosition.x, windowPosition.y);
+          const workAreaForPos = displayForPos.workArea;
+          x = Math.max(workAreaForPos.x, Math.min(windowPosition.x, workAreaForPos.x + workAreaForPos.width - bounds.width));
+          y = Math.max(workAreaForPos.y, Math.min(windowPosition.y, workAreaForPos.y + workAreaForPos.height - bounds.height));
+        } else {
+          x = workArea.x + Math.round((workArea.width - bounds.width) / 2);
+          y = workArea.y + margin;
+        }
+    }
   }
   
   mainWindow.setPosition(x, y);
@@ -124,34 +174,63 @@ function applyWindowPosition() {
 }
 
 function createWindow() {
-  const display = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = display.workAreaSize;
-  
   // Загружаем настройки
   loadSettings();
-  
-  // Определяем начальную позицию окна
+
+  const DEFAULT_WINDOW_WIDTH = 400;
+  const DEFAULT_WINDOW_HEIGHT = 70;
+  const DEFAULT_ESTIMATED_WIDTH = 600;
+  const DEFAULT_MARGIN = 10;
+
+  // Определяем дисплей и начальную позицию окна
+  let targetDisplay;
   let x, y;
-  if (windowPosition && userSettings.position === 'top') {
-    // Используем сохраненную позицию только если позиция не изменилась
-    x = windowPosition.x;
-    y = windowPosition.y;
+
+  const clamp = (value, min, max) => {
+    if (typeof min !== 'number' || typeof max !== 'number') return value;
+    if (min > max) return min;
+    return Math.max(min, Math.min(value, max));
+  };
+
+  if (windowPosition && isPositionOnAnyDisplay(windowPosition.x, windowPosition.y)) {
+    // Используем сохраненную позицию, если она находится на каком-либо дисплее
+    targetDisplay = findDisplayForPosition(windowPosition.x, windowPosition.y);
   } else {
-    // Позиция будет применена после создания окна через applyWindowPosition
-    x = Math.round((screenWidth - 600) / 2);
-    y = 10;
+    targetDisplay = screen.getPrimaryDisplay();
   }
-  
+
+  const workArea = targetDisplay.workArea || targetDisplay.bounds;
+  const areaX = workArea?.x ?? targetDisplay.bounds?.x ?? 0;
+  const areaY = workArea?.y ?? targetDisplay.bounds?.y ?? 0;
+  const areaWidth = workArea?.width ?? targetDisplay.bounds?.width ?? 1920;
+  const areaHeight = workArea?.height ?? targetDisplay.bounds?.height ?? 1080;
+
+  const maxX = areaX + areaWidth - DEFAULT_WINDOW_WIDTH;
+  const maxY = areaY + areaHeight - DEFAULT_WINDOW_HEIGHT;
+
+  if (windowPosition && isPositionOnAnyDisplay(windowPosition.x, windowPosition.y)) {
+    x = clamp(windowPosition.x, areaX, maxX);
+    y = clamp(windowPosition.y, areaY, maxY);
+  } else {
+    const estimatedCenterX = areaX + Math.round((areaWidth - DEFAULT_ESTIMATED_WIDTH) / 2);
+    x = clamp(estimatedCenterX, areaX, maxX);
+    y = clamp(areaY + DEFAULT_MARGIN, areaY, maxY);
+  }
+
+  const sizeSource = targetDisplay.workAreaSize || targetDisplay.size || { width: areaWidth, height: areaHeight };
+  const screenWidth = sizeSource.width || areaWidth;
+  const screenHeight = sizeSource.height || areaHeight;
+
   // Создаем окно dock панели
   mainWindow = new BrowserWindow({
-    width: 400, // Начальная ширина
-    height: 70, // Начальная высота
+    width: DEFAULT_WINDOW_WIDTH, // Начальная ширина
+    height: DEFAULT_WINDOW_HEIGHT, // Начальная высота
     minWidth: 180, // Минимальная ширина
     minHeight: 50, // Минимальная высота
-    maxWidth: screenWidth, // Максимальная ширина = ширина экрана
+    maxWidth: screenWidth, // Максимальная ширина = ширина текущего дисплея
     maxHeight: screenHeight, // Разрешаем большую высоту для вертикального дока
-    x: x,
-    y: y,
+    x: Math.round(x),
+    y: Math.round(y),
     frame: false, // Убираем рамку окна
     transparent: true, // Делаем окно прозрачным
     resizable: true, // Разрешаем изменение размера программно
@@ -177,17 +256,16 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     // Подождем немного чтобы окно полностью загрузилось
     setTimeout(() => {
-      applyWindowPosition();
+      // Используем сохраненную позицию при первом запуске, если она есть
+      applyWindowPosition(!!windowPosition);
     }, 100);
   });
   
-  // Обработчик перемещения окна
+  // Обработчик перемещения окна - сохраняем позицию всегда
   mainWindow.on('moved', () => {
-    if (!isWindowPinned) {
-      const position = mainWindow.getPosition();
-      windowPosition = { x: position[0], y: position[1] };
-      saveSettings();
-    }
+    const position = mainWindow.getPosition();
+    windowPosition = { x: position[0], y: position[1] };
+    saveSettings();
   });
   
   // Автоскрытие панели при потере фокуса (если включено в настройках)
@@ -204,6 +282,15 @@ function createWindow() {
   
   mainWindow.on('hide', () => {
     if (tray) updateTrayMenu();
+  });
+
+  // Сохранение позиции перед закрытием окна
+  mainWindow.on('will-close', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const position = mainWindow.getPosition();
+      windowPosition = { x: position[0], y: position[1] };
+      saveSettings();
+    }
   });
 
   // Обработка закрытия окна
@@ -816,8 +903,9 @@ ipcMain.handle('save-settings', (event, settings) => {
     registerHotkeys();
     
     // Применяем новую позицию окна если она изменилась
+    // Не используем сохраненную позицию, так как настройка позиции изменилась
     if (mainWindow && !mainWindow.isDestroyed()) {
-      applyWindowPosition();
+      applyWindowPosition(false);
     }
 
     // Сохраняем на диск
@@ -1235,9 +1323,44 @@ ipcMain.handle('resize-window-to-content', async (_event, opts = {}) => {
     
     // Устанавливаем позицию
     mainWindow.setPosition(Math.round(newX), Math.round(newY));
-    
+
+    // После изменения размеров и позиции проверяем, что окно полностью в пределах экрана
+    const finalBounds = mainWindow.getBounds();
+    const safeArea = display.workArea || display.bounds;
+    const areaX = safeArea?.x ?? display.bounds?.x ?? 0;
+    const areaY = safeArea?.y ?? display.bounds?.y ?? 0;
+    const areaWidth = safeArea?.width ?? display.bounds?.width ?? currentBounds.width;
+    const areaHeight = safeArea?.height ?? display.bounds?.height ?? currentBounds.height;
+
+    let correctedX = finalBounds.x;
+    let correctedY = finalBounds.y;
+
+    const areaRight = areaX + areaWidth;
+    const areaBottom = areaY + areaHeight;
+
+    if (correctedX < areaX) {
+      correctedX = areaX;
+    }
+    if (correctedX + finalBounds.width > areaRight) {
+      correctedX = areaRight - finalBounds.width;
+    }
+
+    if (correctedY < areaY) {
+      correctedY = areaY;
+    }
+    if (correctedY + finalBounds.height > areaBottom) {
+      correctedY = areaBottom - finalBounds.height;
+    }
+
+    if (correctedX !== finalBounds.x || correctedY !== finalBounds.y) {
+      mainWindow.setPosition(Math.round(correctedX), Math.round(correctedY));
+    }
+
     // Обновляем сохраненную позицию
-    windowPosition = { x: Math.round(newX), y: Math.round(newY) };
+    windowPosition = {
+      x: Math.round(correctedX),
+      y: Math.round(correctedY)
+    };
     
     console.log('Размер окна изменен под dock панель:', { orientation, size: dockSize });
     

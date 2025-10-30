@@ -30,10 +30,6 @@ class DockManager {
         ipcRenderer.on('window-pin-changed', (event, isPinned) => {
             this.isWindowPinned = isPinned;
             this.updateWindowPinIndicator();
-            this.showNotification(
-                isPinned ? '📌 Окно закреплено' : '📌 Окно откреплено - можно перетаскивать',
-                'info'
-            );
         });
 
         // Обработчики для управления приложениями из настроек
@@ -215,11 +211,10 @@ class DockManager {
             const result = await ipcRenderer.invoke('launch-app', app.path);
             
             if (!result.success) {
-                this.showNotification(`Не удалось запустить ${app.name}`, 'error');
+                console.error(`Не удалось запустить ${app.name}`);
             }
         } catch (error) {
             console.error('Ошибка запуска приложения:', error);
-            this.showNotification(`Ошибка при запуске ${app.name}`, 'error');
         }
     }
 
@@ -234,7 +229,6 @@ class DockManager {
                 break;
             case 'toggle-screen-highlighter':
                 await ipcRenderer.invoke('toggle-screen-highlighter');
-                this.showNotification('🎯 ScreenHighlighter переключен', 'info');
                 break;
             case 'toggle-pin':
                 await this.toggleWindowPin();
@@ -246,11 +240,8 @@ class DockManager {
     async toggleWindowPin() {
         try {
             await ipcRenderer.invoke('toggle-window-pin');
-            // Уведомление будет показано через обработчик 'window-pin-changed'
-            // чтобы избежать задержек и дублирования
         } catch (error) {
             console.error('Ошибка переключения состояния закрепления:', error);
-            this.showNotification('Ошибка переключения состояния закрепления', 'error');
         }
     }
 
@@ -428,7 +419,6 @@ class DockManager {
         this.apps.push(newApp);
         this.saveApps();
         this.renderApps(); // Это уже вызовет resizeWindowToContent()
-        this.showNotification(`Приложение "${name}" добавлено`);
     }
 
     // Получение иконки для файла
@@ -630,7 +620,6 @@ class DockManager {
             this.apps = this.apps.filter(a => a.id !== appId);
             this.saveApps();
             this.renderApps(); // Это уже вызовет resizeWindowToContent()
-            this.showNotification(`Приложение "${app.name}" удалено`);
         }
     }
 
@@ -744,24 +733,6 @@ class DockManager {
         }
     }
 
-    // Показ нативных уведомлений (Windows Toast via Notification API)
-    showNotification(message, type = 'info') {
-        try {
-            const title = type === 'error' ? 'Ошибка' : (type === 'success' ? 'Готово' : 'Windows Dock');
-            const show = () => new Notification(title, { body: message, silent: true });
-            if (typeof Notification !== 'undefined') {
-                if (Notification.permission === 'granted') {
-                    show();
-                } else if (Notification.permission !== 'denied') {
-                    Notification.requestPermission().then((perm) => {
-                        if (perm === 'granted') show();
-                    }).catch(() => {});
-                }
-            }
-        } catch (error) {
-            console.error('Ошибка показа нативного уведомления:', error);
-        }
-    }
 
     // Показ настроек
     async showSettings() {
@@ -769,7 +740,6 @@ class DockManager {
             await ipcRenderer.invoke('open-settings');
         } catch (error) {
             console.error('Ошибка открытия настроек:', error);
-            this.showNotification('Ошибка открытия настроек', 'error');
         }
     }
 
@@ -778,7 +748,6 @@ class DockManager {
         if (index >= 0 && index < this.apps.length) {
             const app = this.apps[index];
             this.launchApp(app.id);
-            this.showNotification(`Запуск: ${app.name} (${index + 1})`);
         }
     }
 
@@ -982,9 +951,14 @@ class DockManager {
     // Установка ориентации дока: horizontal | vertical
     setOrientation(orientation) {
         const dock = document.querySelector('.dock');
+        const container = document.querySelector('.dock-container');
         if (!dock) return;
         dock.classList.toggle('vertical', orientation === 'vertical');
         dock.classList.toggle('horizontal', orientation !== 'vertical');
+        if (container) {
+            container.classList.toggle('vertical', orientation === 'vertical');
+            container.classList.toggle('horizontal', orientation !== 'vertical');
+        }
         // Пересчитать и подогнать окно под контент
         this.resizeWindowToContent(this._lastSnapEdge);
     }

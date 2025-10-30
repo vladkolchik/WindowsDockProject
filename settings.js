@@ -54,7 +54,6 @@ class SettingsManager {
             this.renderApps();
         } catch (error) {
             console.error('Ошибка загрузки настроек:', error);
-            this.showNotification('Ошибка загрузки настроек', 'error');
         }
     }
 
@@ -112,11 +111,9 @@ class SettingsManager {
                 const result = await ipcRenderer.invoke('browse-app-file');
                 if (result.success && result.filePath) {
                     document.getElementById('settings-app-path').value = result.filePath;
-                    this.showNotification('Файл выбран', 'success');
                 }
             } catch (error) {
                 console.error('Ошибка выбора файла:', error);
-                this.showNotification('Ошибка выбора файла', 'error');
             }
         });
 
@@ -187,7 +184,6 @@ class SettingsManager {
             
             if (input) {
                 input.value = hotkeyString;
-                this.showNotification('Горячая клавиша обновлена');
             }
         }
         
@@ -213,15 +209,11 @@ class SettingsManager {
 
             const result = await ipcRenderer.invoke('save-settings', newSettings);
             
-            if (result.success) {
-                this.showNotification('Настройки сохранены', 'success');
-                // Окно остается открытым для удобства пользователя
-            } else {
-                this.showNotification('Ошибка сохранения настроек', 'error');
+            if (!result.success) {
+                console.error('Ошибка сохранения настроек');
             }
         } catch (error) {
             console.error('Ошибка сохранения настроек:', error);
-            this.showNotification('Ошибка сохранения настроек', 'error');
         }
     }
 
@@ -243,31 +235,11 @@ class SettingsManager {
             this.hotkeyInputs['quit'].value = 'Ctrl+Q';
             this.hotkeyInputs['add-app'].value = 'Ctrl+N';
             this.hotkeyInputs['help'].value = 'F1';
-
-            this.showNotification('Настройки сброшены');
         }
     }
 
     closeWindow() {
         window.close();
-    }
-
-    showNotification(message, type = 'info') {
-        try {
-            const title = type === 'error' ? 'Ошибка' : (type === 'success' ? 'Готово' : 'Windows Dock');
-            const show = () => new Notification(title, { body: message, silent: true });
-            if (typeof Notification !== 'undefined') {
-                if (Notification.permission === 'granted') {
-                    show();
-                } else if (Notification.permission !== 'denied') {
-                    Notification.requestPermission().then((perm) => {
-                        if (perm === 'granted') show();
-                    }).catch(() => {});
-                }
-            }
-        } catch (error) {
-            console.error('Ошибка показа нативного уведомления (settings):', error);
-        }
     }
 
     // Отображение приложений в настройках
@@ -371,7 +343,6 @@ class SettingsManager {
         const icon = document.getElementById('settings-app-icon').value.trim() || '🚀';
 
         if (!name || !path) {
-            this.showNotification('Заполните все обязательные поля', 'error');
             return;
         }
 
@@ -388,13 +359,9 @@ class SettingsManager {
                 this.apps.push(newApp);
                 this.renderApps();
                 this.clearAddAppForm();
-                this.showNotification(`Приложение "${name}" добавлено`, 'success');
-            } else {
-                this.showNotification('Ошибка добавления приложения', 'error');
             }
         } catch (error) {
             console.error('Ошибка добавления приложения:', error);
-            this.showNotification('Ошибка добавления приложения', 'error');
         }
     }
 
@@ -411,13 +378,9 @@ class SettingsManager {
             if (result.success) {
                 this.apps = this.apps.filter(a => a.id !== appId);
                 this.renderApps();
-                this.showNotification(`Приложение "${app.name}" удалено`, 'success');
-            } else {
-                this.showNotification('Ошибка удаления приложения', 'error');
             }
         } catch (error) {
             console.error('Ошибка удаления приложения:', error);
-            this.showNotification('Ошибка удаления приложения', 'error');
         }
     }
 
