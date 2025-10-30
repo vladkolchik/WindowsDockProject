@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ScreenHighlighter Overlay</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+        pointer-events: none;
+      }
+      body {
+        position: relative;
+      }
+      canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+        pointer-events: auto;
+      }
+      #ui-panel {
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        background: rgba(20, 20, 20, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        padding: 0;
+        color: white;
+        font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        pointer-events: auto;
+        z-index: 1000;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        overflow: hidden;
+        cursor: default;
+      }
+      .ui-header {
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .ui-title {
+        font-weight: 500;
+        font-size: 12px;
+        opacity: 0.9;
+        letter-spacing: 0.3px;
+      }
+      .ui-body {
+        padding: 12px;
+      }
+      .ui-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .ui-row:last-child { margin-bottom: 0; }
+      .ui-button {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.9);
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .ui-button:hover {
+        background: rgba(255, 255, 255, 0.14);
+        border-color: rgba(255, 255, 255, 0.2);
+        transform: translateY(-1px);
+      }
+      .ui-button:active {
+        background: rgba(255, 255, 255, 0.18);
+        transform: translateY(0);
+      }
+      .ui-info {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        line-height: 1.5;
+      }
+      .ui-info-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+      .ui-info-row:last-child { margin-bottom: 0; }
+      .ui-key {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-family: 'Consolas', 'Monaco', monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="overlay"></canvas>
+    
+    <div id="ui-panel">
+      <div class="ui-header">
+        <div class="ui-title">Управление</div>
+      </div>
+      <div class="ui-body">
+        <div class="ui-row">
+          <button id="btn-clear" class="ui-button">
+            <span>✕</span>
+            <span>Очистить</span>
+          </button>
+        </div>
+        <div class="ui-row">
+          <button id="btn-hide" class="ui-button">
+            <span>⊗</span>
+            <span>Скрыть</span>
+          </button>
+        </div>
+        <div class="ui-info">
+          <div class="ui-info-row">
+            <span>Показать/Скрыть</span>
+            <span class="ui-key">Ctrl+Shift+H</span>
+          </div>
+          <div class="ui-info-row">
+            <span>Очистить</span>
+            <span class="ui-key">Esc</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script src="overlay.js"></script>
+  </body>
+</html>
+

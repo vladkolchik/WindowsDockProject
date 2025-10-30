@@ -18,8 +18,8 @@ class SettingsManager {
         this.startupCheckbox = document.getElementById('startup');
         this.themeSelect = document.getElementById('theme');
         this.positionSelect = document.getElementById('position');
-        this.iconSizeSlider = document.getElementById('icon-size');
-        this.iconSizeValue = document.getElementById('icon-size-value');
+        this.dockScaleSlider = document.getElementById('dock-scale');
+        this.dockScaleValue = document.getElementById('dock-scale-value');
 
         // Горячие клавиши
         this.hotkeyInputs = {
@@ -68,9 +68,10 @@ class SettingsManager {
         this.themeSelect.value = this.settings.theme || 'auto';
         this.positionSelect.value = this.settings.position || 'top';
 
-        // Обновляем слайдер размера иконок
-        this.iconSizeSlider.value = this.settings.iconSize || 48;
-        this.iconSizeValue.textContent = `${this.iconSizeSlider.value}px`;
+        // Обновляем слайдер масштаба панели (преобразуем из десятичного в проценты)
+        const scalePercent = Math.round((this.settings.dockScale || 1) * 100);
+        this.dockScaleSlider.value = scalePercent;
+        this.dockScaleValue.textContent = `${scalePercent}%`;
 
         // Обновляем горячие клавиши
         if (this.settings.hotkeys) {
@@ -83,8 +84,8 @@ class SettingsManager {
 
     setupEventListeners() {
         // Слайдер размера иконок
-        this.iconSizeSlider.addEventListener('input', (e) => {
-            this.iconSizeValue.textContent = `${e.target.value}px`;
+        this.dockScaleSlider.addEventListener('input', (e) => {
+            this.dockScaleValue.textContent = `${e.target.value}%`;
         });
 
         // Кнопки горячих клавиш
@@ -106,8 +107,17 @@ class SettingsManager {
             this.addAppFromSettings();
         });
 
-        document.getElementById('settings-browse-button').addEventListener('click', () => {
-            this.showNotification('Функция "Обзор" будет доступна в будущих обновлениях');
+        document.getElementById('settings-browse-button').addEventListener('click', async () => {
+            try {
+                const result = await ipcRenderer.invoke('browse-app-file');
+                if (result.success && result.filePath) {
+                    document.getElementById('settings-app-path').value = result.filePath;
+                    this.showNotification('Файл выбран', 'success');
+                }
+            } catch (error) {
+                console.error('Ошибка выбора файла:', error);
+                this.showNotification('Ошибка выбора файла', 'error');
+            }
         });
 
         // Модальное окно горячих клавиш
@@ -192,7 +202,7 @@ class SettingsManager {
                 startup: this.startupCheckbox.checked,
                 theme: this.themeSelect.value,
                 position: this.positionSelect.value,
-                iconSize: parseInt(this.iconSizeSlider.value),
+                dockScale: parseInt(this.dockScaleSlider.value, 10) / 100,
                 hotkeys: {
                     toggleDock: this.hotkeyInputs['toggle-dock'].value,
                     quit: this.hotkeyInputs['quit'].value,
@@ -225,8 +235,8 @@ class SettingsManager {
             this.startupCheckbox.checked = false;
             this.themeSelect.value = 'auto';
             this.positionSelect.value = 'top';
-            this.iconSizeSlider.value = 48;
-            this.iconSizeValue.textContent = '48px';
+            this.dockScaleSlider.value = 100;
+            this.dockScaleValue.textContent = '100%';
 
             // Горячие клавиши по умолчанию
             this.hotkeyInputs['toggle-dock'].value = 'Ctrl+H';
@@ -303,8 +313,20 @@ class SettingsManager {
             // Подгружаем нативную иконку если есть путь
             const iconHolder = appItem.querySelector('.app-item-icon');
             if (iconHolder) {
-                if (app.path) {
-                    ipcRenderer.invoke('get-native-icon', app.path, 'large')
+                const shouldUseNative = (() => {
+                    try {
+                        const pathMod = require('path');
+                        const ext = (pathMod.extname(app.path || '') || '').toLowerCase().replace('.', '');
+                        const preferred = new Set(['exe', 'lnk', 'msi', 'bat', 'cmd', 'app', 'scr', 'com', 'dll', 'ico']);
+                        return !!app.path && preferred.has(ext);
+                    } catch {
+                        return !!app.path;
+                    }
+                })();
+
+                if (shouldUseNative) {
+                    ipcRenderer
+                        .invoke('get-native-icon', app.path, 'large')
                         .then((res) => {
                             if (res && res.success && res.dataUrl) {
                                 const img = document.createElement('img');
@@ -316,14 +338,14 @@ class SettingsManager {
                                 img.style.verticalAlign = 'middle';
                                 iconHolder.replaceChildren(img);
                             } else {
-                                iconHolder.textContent = app.icon || '🚀';
+                                iconHolder.textContent = this.getEmojiForApp(app.name, app.path);
                             }
                         })
                         .catch(() => {
-                            iconHolder.textContent = app.icon || '🚀';
+                            iconHolder.textContent = this.getEmojiForApp(app.name, app.path);
                         });
                 } else {
-                    iconHolder.textContent = app.icon || '🚀';
+                    iconHolder.textContent = this.getEmojiForApp(app.name, app.path);
                 }
             }
 
@@ -404,6 +426,85 @@ class SettingsManager {
         document.getElementById('settings-app-name').value = '';
         document.getElementById('settings-app-path').value = '';
         document.getElementById('settings-app-icon').value = '';
+    }
+
+    // Умное определение эмоджи по названию приложения и пути
+    getEmojiForApp(appName, appPath) {
+        if (!appName && !appPath) return '📱';
+
+        const name = (appName || appPath || '').toLowerCase();
+        const path = (appPath || '').toLowerCase();
+
+        // Точные совпадения для популярных приложений
+        const exactMatches = {
+            'chrome': '🌐', 'google chrome': '🌐', 'firefox': '🦊', 'safari': '🧭', 'edge': '🌀',
+            'explorer': '📁', 'file explorer': '📁', 'проводник': '📁',
+            'terminal': '⚡', 'cmd': '⚡', 'powershell': '⚡', 'консоль': '⚡', 'command prompt': '⚡',
+            'vs code': '💻', 'visual studio code': '💻', 'vscode': '💻',
+            'sublime': '✏️', 'notepad': '📝', 'notepad++': '📝',
+            'discord': '💬', 'slack': '💬', 'telegram': '✈️', 'whatsapp': '💬', 'skype': '📞',
+            'zoom': '🎥', 'google meet': '🎥',
+            'steam': '🎮', 'epic': '🎮', 'valorant': '🎮', 'league of legends': '🎮',
+            'obs': '🎬', 'davinci': '🎬',
+            'photoshop': '🖼️', 'figma': '🎨', 'blender': '🎨',
+            'visual studio': '📊', 'intellij': '📊', 'pycharm': '🐍',
+            'git': '🌳', 'github desktop': '🌳', 'docker': '🐳',
+            'vbox': '💾', 'virtualbox': '💾', 'vmware': '💾', 'qemu': '💾', 'hyper-v': '💾',
+            'winrar': '📁', '7-zip': '📁', 'winzip': '📁',
+            'potplayer': '🎵', 'vlc': '🎵', 'foobar': '🎵', 'audacity': '🎵', 'spotify': '🎵',
+            'youtube': '📺', 'twitch': '📺', 'netflix': '📺',
+            'calculator': '🔢', 'калькулятор': '🔢',
+            'settings': '⚙️', 'параметры': '⚙️', 'панель управления': '⚙️', 'control panel': '⚙️',
+            'cursor': '👆',
+            'notion': '📋', 'obsidian': '🧠', 'roam': '🧠', 'evernote': '📔', 'onenote': '📔',
+            'trello': '✅', 'asana': '✅', 'jira': '✅', 'monday': '✅',
+            'dropbox': '☁️', 'onedrive': '☁️', 'google drive': '☁️', 'icloud': '☁️', 'synology': '☁️', 'nextcloud': '☁️', 'seafile': '☁️'
+        };
+
+        for (const [key, emoji] of Object.entries(exactMatches)) {
+            if (name.includes(key) || path.includes(key)) {
+                return emoji;
+            }
+        }
+
+        // Паттерны по типам приложений
+        const patternMatches = [
+            { patterns: ['browser', 'navigator', 'минет'], emoji: '🌐' },
+            { patterns: ['studio', 'editor', 'editor', 'ide'], emoji: '💻' },
+            { patterns: ['media', 'player', 'video', 'audio', 'фильм', 'видео', 'музык'], emoji: '🎵' },
+            { patterns: ['design', 'paint', 'graphics', 'рисунок', 'граф'], emoji: '🎨' },
+            { patterns: ['zip', 'rar', 'archive', 'архив'], emoji: '📁' },
+            { patterns: ['mail', 'email', 'messenger', 'chat', 'почт'], emoji: '💬' },
+            { patterns: ['cloud', 'sync', 'drive', 'облак'], emoji: '☁️' },
+            { patterns: ['virtual', 'machine', 'vm', 'hyper', 'виртуальн'], emoji: '💾' },
+            { patterns: ['office', 'word', 'excel', 'writer', 'документ'], emoji: '📄' },
+            { patterns: ['antivirus', 'security', 'vpn', 'защит', 'безопас'], emoji: '🔒' },
+            { patterns: ['tool', 'utility', 'system', 'admin', 'утилит'], emoji: '🔧' },
+            { patterns: ['game', 'play', 'launcher', 'игр'], emoji: '🎮' },
+            { patterns: ['dev', 'code', 'build', 'compile', 'разрабо', 'программ'], emoji: '⚙️' }
+        ];
+
+        for (const { patterns, emoji } of patternMatches) {
+            if (patterns.some(p => name.includes(p) || path.includes(p))) {
+                return emoji;
+            }
+        }
+
+        // Проверяем расширение файла в пути
+        const extension = path.split('.').pop();
+        const extEmojiMap = {
+            'exe': '🚀', 'msi': '📦', 'bat': '⚡', 'cmd': '⚡', 'lnk': '🔗', 'app': '📱',
+            'deb': '📦', 'rpm': '📦', 'dmg': '💿', 'sh': '⚡', 'py': '🐍', 'js': '⚡', 'java': '☕'
+        };
+
+        if (extEmojiMap[extension]) {
+            return extEmojiMap[extension];
+        }
+
+        // Универсальный fallback для неизвестных приложений
+        const fallbackEmojis = ['📱', '📦', '🔧', '📋', '✨', '🎯', '💡', '🌟'];
+        const hash = (appName + appPath).charCodeAt(0) + (appName + appPath).charCodeAt((appName + appPath).length - 1);
+        return fallbackEmojis[hash % fallbackEmojis.length];
     }
 }
 

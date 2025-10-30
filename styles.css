@@ -5,6 +5,41 @@
     box-sizing: border-box;
 }
 
+:root {
+    --dock-scale: 1;
+    
+    /* Цвета по умолчанию (light theme) */
+    --dock-bg: rgba(255, 255, 255, 0.1);
+    --dock-bg-hover: rgba(255, 255, 255, 0.2);
+    --dock-border: rgba(255, 255, 255, 0.1);
+    --dock-border-hover: rgba(255, 255, 255, 0.3);
+    --dock-shadow: rgba(0, 0, 0, 0.3);
+    --dock-icon-shadow: rgba(0, 0, 0, 0.3);
+    --dock-separator: rgba(255, 255, 255, 0.2);
+}
+
+/* Тёмная тема */
+body.theme-dark {
+    --dock-bg: rgba(0, 0, 0, 0.3);
+    --dock-bg-hover: rgba(0, 0, 0, 0.5);
+    --dock-border: rgba(255, 255, 255, 0.15);
+    --dock-border-hover: rgba(255, 255, 255, 0.4);
+    --dock-shadow: rgba(0, 0, 0, 0.5);
+    --dock-icon-shadow: rgba(0, 0, 0, 0.5);
+    --dock-separator: rgba(255, 255, 255, 0.25);
+}
+
+/* Светлая тема (явно) */
+body.theme-light {
+    --dock-bg: rgba(255, 255, 255, 0.1);
+    --dock-bg-hover: rgba(255, 255, 255, 0.2);
+    --dock-border: rgba(255, 255, 255, 0.1);
+    --dock-border-hover: rgba(255, 255, 255, 0.3);
+    --dock-shadow: rgba(0, 0, 0, 0.3);
+    --dock-icon-shadow: rgba(0, 0, 0, 0.3);
+    --dock-separator: rgba(255, 255, 255, 0.2);
+}
+
 body {
     background: transparent;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -112,10 +147,10 @@ body {
     align-items: center;
     background: transparent;
     border-radius: 0;
-    padding: 8px 16px;
+    padding: calc(8px * var(--dock-scale)) calc(16px * var(--dock-scale));
     border: none;
     box-shadow: none;
-    gap: 8px;
+    gap: calc(8px * var(--dock-scale));
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     animation: slideInFromTop 0.4s ease-out;
     width: auto; /* Автоматическая ширина под содержимое */
@@ -143,7 +178,7 @@ body {
 .dock-section {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: calc(8px * var(--dock-scale));
     flex-wrap: nowrap; /* Не переносить элементы на новую строку */
     overflow: visible; /* Показывать overflow для подсказок */
 }
@@ -216,15 +251,15 @@ body {
 /* Элементы dock панели */
 .dock-item {
     position: relative;
-    width: 48px;
-    height: 48px;
+    width: calc(48px * var(--dock-scale));
+    height: calc(48px * var(--dock-scale));
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
+    background: var(--dock-bg);
+    border-radius: calc(12px * var(--dock-scale));
     cursor: pointer;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--dock-border);
     overflow: hidden;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     animation: fadeInScale 0.5s ease-out;
@@ -237,7 +272,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    background: linear-gradient(135deg, var(--dock-bg) 0%, rgba(255, 255, 255, 0.05) 100%);
     opacity: 0;
     transition: opacity 0.3s ease;
 }
@@ -247,33 +282,33 @@ body {
 }
 
 .dock-item:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: var(--dock-bg-hover);
+    border-color: var(--dock-border-hover);
     box-shadow: 
-        0 8px 25px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(255, 255, 255, 0.2);
+        0 8px 25px var(--dock-shadow),
+        0 0 0 1px var(--dock-border);
     transform: translateY(-3px) scale(1.1);
 }
 
 .dock-item:active {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--dock-bg-hover);
     transform: translateY(-1px) scale(1.05);
 }
 
 /* Иконки */
 .dock-icon {
-    font-size: 24px;
+    font-size: calc(24px * var(--dock-scale));
     line-height: 1;
     z-index: 1;
     position: relative;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    filter: drop-shadow(0 2px 4px var(--dock-icon-shadow));
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Для нативных иконок-изображений */
 .dock-icon-img {
-    width: 24px;
-    height: 24px;
+    width: calc(24px * var(--dock-scale));
+    height: calc(24px * var(--dock-scale));
     image-rendering: -webkit-optimize-contrast;
     -webkit-user-drag: none;
     pointer-events: none;
@@ -317,25 +352,25 @@ body {
 /* Разделитель */
 .dock-separator {
     width: 1px;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.2);
-    margin: 0 8px;
+    height: calc(32px * var(--dock-scale));
+    background: var(--dock-separator);
+    margin: 0 calc(8px * var(--dock-scale));
     transition: height 0.3s ease;
 }
 
 .dock:hover .dock-separator {
-    height: 36px;
+    height: calc(36px * var(--dock-scale));
 }
 
 .dock.vertical .dock-separator {
-    width: 32px;
+    width: calc(32px * var(--dock-scale));
     height: 1px;
-    margin: 8px 0;
+    margin: calc(8px * var(--dock-scale)) 0;
     transition: width 0.3s ease;
 }
 
 .dock.vertical:hover .dock-separator {
-    width: 36px;
+    width: calc(36px * var(--dock-scale));
 }
 
 /* Drag & Drop индикатор */

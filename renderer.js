@@ -48,6 +48,12 @@ class DockManager {
             this.saveApps();
             this.renderApps(); // Это уже вызовет resizeWindowToContent()
         });
+
+        // Обработчик обновления настроек (масштаб панели и тема после сохранения в настройках)
+        ipcRenderer.on('settings-updated', (event, userSettings) => {
+            this.applyDockScale(userSettings.dockScale || 1);
+            this.applyTheme(userSettings.theme || 'auto');
+        });
         
         // Обработчик изменения размера экрана
         window.addEventListener('resize', () => {
@@ -56,6 +62,12 @@ class DockManager {
                 this.resizeWindowToContent();
             }, 200);
         });
+
+        // Загрузка и применение сохраненного масштаба при старте
+        this.loadAndApplyDockScale();
+        
+        // Загрузка и применение темы при старте
+        this.loadAndApplyTheme();
     }
 
     // Загрузка приложений из localStorage
@@ -155,25 +167,9 @@ class DockManager {
                 this.hideDragDropIndicator();
             }
             
-            // Ctrl + H - скрыть/показать dock
-            if (e.ctrlKey && e.key === 'h') {
-                e.preventDefault();
-                this.handleSystemAction('toggle-dock');
-            }
-            
-            // Ctrl + Q - выход из приложения
-            if (e.ctrlKey && e.key === 'q') {
-                e.preventDefault();
-                this.handleSystemAction('quit');
-            }
-            
-            // F1 - показать помощь
-            if (e.key === 'F1') {
-                e.preventDefault();
-                this.showHelp();
-            }
-            
-
+            // Глобальные горячие клавиши теперь регистрируются в main.js
+            // Здесь оставляем только цифры 1-9 для быстрого запуска приложений
+            // (они работают только когда окно в фокусе)
             
             // Цифры 1-9 - быстрый запуск приложений
             if (e.key >= '1' && e.key <= '9') {
@@ -236,6 +232,10 @@ class DockManager {
             case 'quit':
                 await ipcRenderer.invoke('quit-app');
                 break;
+            case 'toggle-screen-highlighter':
+                await ipcRenderer.invoke('toggle-screen-highlighter');
+                this.showNotification('🎯 ScreenHighlighter переключен', 'info');
+                break;
             case 'toggle-pin':
                 await this.toggleWindowPin();
                 break;
@@ -245,15 +245,9 @@ class DockManager {
     // Переключение состояния закрепления окна
     async toggleWindowPin() {
         try {
-            const newPinState = await ipcRenderer.invoke('toggle-window-pin');
-            this.isWindowPinned = newPinState;
-            this.updateWindowPinIndicator();
-            
-            // Показываем уведомление
-            const message = this.isWindowPinned 
-                ? '📌 Окно закреплено' 
-                : '🔓 Окно откреплено - теперь можно перетаскивать';
-            this.showNotification(message, 'info');
+            await ipcRenderer.invoke('toggle-window-pin');
+            // Уведомление будет показано через обработчик 'window-pin-changed'
+            // чтобы избежать задержек и дублирования
         } catch (error) {
             console.error('Ошибка переключения состояния закрепления:', error);
             this.showNotification('Ошибка переключения состояния закрепления', 'error');
@@ -399,7 +393,14 @@ class DockManager {
                     dock.classList.add('horizontal');
                 }
 
-                const result = await ipcRenderer.invoke('resize-window-to-content', { anchor: anchorEdge || this._lastSnapEdge || null });
+                // Определяем текущую ориентацию дока
+                const orientation = dock && dock.classList.contains('vertical') ? 'vertical' : 'horizontal';
+                console.log('Определена ориентация:', orientation, 'Классы dock:', dock ? dock.className : 'no dock');
+                
+                const result = await ipcRenderer.invoke('resize-window-to-content', { 
+                    anchor: anchorEdge || this._lastSnapEdge || null,
+                    orientation: orientation
+                });
                 if (!result || !result.success) {
                     console.error('Ошибка изменения размера окна:', result && result.error);
                 }
@@ -451,6 +452,171 @@ class DockManager {
         };
 
         return iconMap[extension] || '🚀';
+    }
+
+    // Умное определение эмоджи по названию приложения и пути
+    getEmojiForApp(appName, appPath) {
+        if (!appName && !appPath) return '📱';
+
+        const name = (appName || appPath || '').toLowerCase();
+        const path = (appPath || '').toLowerCase();
+
+        // Точные совпадения для популярных приложений
+        const exactMatches = {
+            'chrome': '🌐',
+            'google chrome': '🌐',
+            'firefox': '🦊',
+            'safari': '🧭',
+            'edge': '🌀',
+            'explorer': '📁',
+            'file explorer': '📁',
+            'проводник': '📁',
+            'terminal': '⚡',
+            'cmd': '⚡',
+            'powershell': '⚡',
+            'консоль': '⚡',
+            'command prompt': '⚡',
+            'vs code': '💻',
+            'visual studio code': '💻',
+            'vscode': '💻',
+            'sublime': '✏️',
+            'notepad': '📝',
+            'notepad++': '📝',
+            'discord': '💬',
+            'slack': '💬',
+            'telegram': '✈️',
+            'whatsapp': '💬',
+            'skype': '📞',
+            'zoom': '🎥',
+            'google meet': '🎥',
+            'steam': '🎮',
+            'epic': '🎮',
+            'valorant': '🎮',
+            'league of legends': '🎮',
+            'obs': '🎬',
+            'davinci': '🎬',
+            'photoshop': '🖼️',
+            'figma': '🎨',
+            'blender': '🎨',
+            'visual studio': '📊',
+            'intellij': '📊',
+            'pycharm': '🐍',
+            'git': '🌳',
+            'github desktop': '🌳',
+            'docker': '🐳',
+            'vbox': '💾',
+            'virtualbox': '💾',
+            'vmware': '💾',
+            'qemu': '💾',
+            'hyper-v': '💾',
+            'winrar': '📁',
+            '7-zip': '📁',
+            'winzip': '📁',
+            'potplayer': '🎵',
+            'vlc': '🎵',
+            'foobar': '🎵',
+            'audacity': '🎵',
+            'spotify': '🎵',
+            'youtube': '📺',
+            'twitch': '📺',
+            'netflix': '📺',
+            'chrome': '🌐',
+            'calculator': '🔢',
+            'калькулятор': '🔢',
+            'settings': '⚙️',
+            'параметры': '⚙️',
+            'панель управления': '⚙️',
+            'control panel': '⚙️',
+            'cursor': '👆',
+            'notion': '📋',
+            'obsidian': '🧠',
+            'roam': '🧠',
+            'evernote': '📔',
+            'onenote': '📔',
+            'notion': '📋',
+            'trello': '✅',
+            'asana': '✅',
+            'jira': '✅',
+            'monday': '✅',
+            'notion': '📋',
+            'dropbox': '☁️',
+            'onedrive': '☁️',
+            'google drive': '☁️',
+            'icloud': '☁️',
+            'synology': '☁️',
+            'nextcloud': '☁️',
+            'seafile': '☁️'
+        };
+
+        // Проверяем точные совпадения
+        for (const [key, emoji] of Object.entries(exactMatches)) {
+            if (name.includes(key) || path.includes(key)) {
+                return emoji;
+            }
+        }
+
+        // Паттерны по типам приложений (без точных совпадений)
+        const patternMatches = [
+            // Браузеры
+            { patterns: ['browser', 'navigator', 'минет'], emoji: '🌐' },
+            // Редакторы кода
+            { patterns: ['studio', 'editor', 'editor', 'ide'], emoji: '💻' },
+            // Мультимедиа
+            { patterns: ['media', 'player', 'video', 'audio', 'фильм', 'видео', 'музык'], emoji: '🎵' },
+            // Графика
+            { patterns: ['design', 'paint', 'graphics', 'рисунок', 'граф'], emoji: '🎨' },
+            // Архиватор
+            { patterns: ['zip', 'rar', 'archive', 'архив'], emoji: '📁' },
+            // Коммуникация
+            { patterns: ['mail', 'email', 'messenger', 'chat', 'почт'], emoji: '💬' },
+            // Облако/синхронизация
+            { patterns: ['cloud', 'sync', 'drive', 'облак'], emoji: '☁️' },
+            // Виртуализация
+            { patterns: ['virtual', 'machine', 'vm', 'hyper', 'виртуальн'], emoji: '💾' },
+            // Учет/документы
+            { patterns: ['office', 'word', 'excel', 'writer', 'документ'], emoji: '📄' },
+            // Безопасность
+            { patterns: ['antivirus', 'security', 'vpn', 'защит', 'безопас'], emoji: '🔒' },
+            // Система/утилиты
+            { patterns: ['tool', 'utility', 'system', 'admin', 'утилит'], emoji: '🔧' },
+            // Игры
+            { patterns: ['game', 'play', 'launcher', 'игр'], emoji: '🎮' },
+            // Разработка
+            { patterns: ['dev', 'code', 'build', 'compile', 'разрабо', 'программ'], emoji: '⚙️' }
+        ];
+
+        for (const { patterns, emoji } of patternMatches) {
+            if (patterns.some(p => name.includes(p) || path.includes(p))) {
+                return emoji;
+            }
+        }
+
+        // Проверяем расширение файла в пути
+        const extension = path.split('.').pop();
+        const extEmojiMap = {
+            'exe': '🚀',
+            'msi': '📦',
+            'bat': '⚡',
+            'cmd': '⚡',
+            'lnk': '🔗',
+            'app': '📱',
+            'deb': '📦',
+            'rpm': '📦',
+            'dmg': '💿',
+            'sh': '⚡',
+            'py': '🐍',
+            'js': '⚡',
+            'java': '☕'
+        };
+
+        if (extEmojiMap[extension]) {
+            return extEmojiMap[extension];
+        }
+
+        // Универсальный fallback для неизвестных приложений
+        const fallbackEmojis = ['📱', '📦', '🔧', '📋', '✨', '🎯', '💡', '🌟'];
+        const hash = (appName + appPath).charCodeAt(0) + (appName + appPath).charCodeAt((appName + appPath).length - 1);
+        return fallbackEmojis[hash % fallbackEmojis.length];
     }
 
     // Удаление приложения
@@ -520,24 +686,29 @@ class DockManager {
 
         const dockIcon = document.createElement('div');
         dockIcon.className = 'dock-icon';
-        // Если у приложения есть путь — попробуем подгрузить нативную иконку
-        if (app.path) {
-            this.loadNativeIcon(app.path).then((dataUrl) => {
-                if (dataUrl) {
-                    const img = document.createElement('img');
-                    img.src = dataUrl;
-                    img.alt = app.name || '';
-                    img.draggable = false;
-                    img.className = 'dock-icon-img';
-                    dockIcon.replaceChildren(img);
-                } else {
-                    dockIcon.textContent = app.icon || '🚀';
-                }
-            }).catch(() => {
-                dockIcon.textContent = app.icon || '🚀';
-            });
+        // Если у приложения есть путь — пробуем подгрузить нативную иконку только для "иконосодержащих" типов
+        if (app.path && this.shouldUseNativeIcon(app.path)) {
+            this.loadNativeIcon(app.path)
+                .then((dataUrl) => {
+                    if (dataUrl) {
+                        const img = document.createElement('img');
+                        img.src = dataUrl;
+                        img.alt = app.name || '';
+                        img.draggable = false;
+                        img.className = 'dock-icon-img';
+                        dockIcon.replaceChildren(img);
+                    } else {
+                        // Fallback: умный выбор эмоджи по названию и пути
+                        dockIcon.textContent = this.getEmojiForApp(app.name, app.path);
+                    }
+                })
+                .catch(() => {
+                    // Fallback: умный выбор эмоджи по названию и пути
+                    dockIcon.textContent = this.getEmojiForApp(app.name, app.path);
+                });
         } else {
-            dockIcon.textContent = app.icon || '🚀';
+            // Если пути нет, используем умный выбор эмоджи
+            dockIcon.textContent = this.getEmojiForApp(app.name, app.path) || app.icon || '🚀';
         }
 
         dockItem.appendChild(dockIcon);
@@ -556,6 +727,20 @@ class DockManager {
         } catch (error) {
             console.error('Ошибка загрузки нативной иконки:', error);
             return null;
+        }
+    }
+
+    // Решаем, имеет ли смысл пытаться грузить нативную иконку
+    // Для многих типов Windows возвращает "пустую" иконку-файл — тогда лучше сразу эмоджи
+    shouldUseNativeIcon(filePath) {
+        try {
+            const pathMod = require('path');
+            const ext = (pathMod.extname(filePath) || '').toLowerCase().replace('.', '');
+            // Список типов, у которых обычно есть собственная иконка
+            const preferred = new Set(['exe', 'lnk', 'msi', 'bat', 'cmd', 'app', 'scr', 'com', 'dll', 'ico']);
+            return preferred.has(ext);
+        } catch {
+            return true;
         }
     }
 
@@ -802,6 +987,91 @@ class DockManager {
         dock.classList.toggle('horizontal', orientation !== 'vertical');
         // Пересчитать и подогнать окно под контент
         this.resizeWindowToContent(this._lastSnapEdge);
+    }
+
+    // Загрузка и применение сохраненного масштаба панели
+    async loadAndApplyDockScale() {
+        try {
+            const settings = await ipcRenderer.invoke('get-settings');
+            const scale = settings.dockScale || 1;
+            this.applyDockScale(scale);
+        } catch (error) {
+            console.error('Ошибка загрузки масштаба панели:', error);
+        }
+    }
+
+    // Применение масштаба к dock панели
+    applyDockScale(scale) {
+        document.documentElement.style.setProperty('--dock-scale', String(scale || 1));
+        // Пересчитываем размер окна с новым масштабом
+        setTimeout(() => {
+            this.resizeWindowToContent();
+        }, 50);
+    }
+
+    // Определение системной темы (для auto режима)
+    getSystemTheme() {
+        // Используем matchMedia для определения системной темы
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+        }
+        return 'light';
+    }
+
+    // Применение темы
+    applyTheme(theme) {
+        const body = document.body;
+        
+        // Удаляем все классы тем
+        body.classList.remove('theme-light', 'theme-dark', 'theme-auto');
+        
+        if (theme === 'auto') {
+            // Определяем системную тему
+            const systemTheme = this.getSystemTheme();
+            body.classList.add('theme-auto', `theme-${systemTheme}`);
+            
+            // Слушаем изменения системной темы
+            if (window.matchMedia) {
+                const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                const handleThemeChange = (e) => {
+                    body.classList.remove('theme-light', 'theme-dark');
+                    body.classList.add(`theme-${e.matches ? 'dark' : 'light'}`);
+                };
+                
+                // Удаляем старый слушатель если есть
+                if (this.themeMediaQueryListener) {
+                    // Используем removeEventListener для современных браузеров
+                    if (mediaQuery.removeEventListener) {
+                        mediaQuery.removeEventListener('change', this.themeMediaQueryListener);
+                    } else if (mediaQuery.removeListener) {
+                        mediaQuery.removeListener(this.themeMediaQueryListener);
+                    }
+                }
+                
+                // Добавляем новый слушатель
+                this.themeMediaQueryListener = handleThemeChange;
+                if (mediaQuery.addEventListener) {
+                    mediaQuery.addEventListener('change', handleThemeChange);
+                } else if (mediaQuery.addListener) {
+                    mediaQuery.addListener(handleThemeChange);
+                }
+            }
+        } else {
+            body.classList.add(`theme-${theme}`);
+        }
+    }
+
+    // Загрузка и применение сохраненной темы
+    async loadAndApplyTheme() {
+        try {
+            const settings = await ipcRenderer.invoke('get-settings');
+            const theme = settings.theme || 'auto';
+            this.applyTheme(theme);
+        } catch (error) {
+            console.error('Ошибка загрузки темы:', error);
+            // Применяем тему по умолчанию
+            this.applyTheme('auto');
+        }
     }
 }
 
